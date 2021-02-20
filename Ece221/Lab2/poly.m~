@@ -1,0 +1,7 @@
+vec = [4;0;-2;5];
+vecsize= size(vec);
+i = vecsize(1);
+x = [
+for i:-1:0
+    
+end

@@ -1,0 +1,2758 @@
+/* 
+ * File:   m2.cpp
+ * Author: nglam
+ *
+ * Created on February 14, 2018, 3:50 PM
+ */
+
+#include "m2.h"
+#include "m1.h"
+#include "m3.h"
+#include "global.h"
+#include "map_data_structure.h"
+#include "graphics.h"
+#include "StreetsDatabaseAPI.h"
+#include "OSMDatabaseAPI.h"
+#include "OSMID.h"
+#include "OSMEntity.h"
+#include "OSMNode.h"
+#include "OSMWay.h"
+#include "OSMRelation.h"
+#include <tuple>
+#include <boost/geometry.hpp>
+#include <boost/geometry/geometries/point.hpp>
+#include <boost/geometry/geometries/box.hpp>
+#include <boost/geometry/index/rtree.hpp>
+#include <cmath>
+#include <stdio.h>
+#include <unistd.h>
+#include <termios.h>
+#include <string>
+#include <algorithm>
+
+namespace bg = boost::geometry; // lets us use bg::  instead of  boost::geometry::
+namespace bgi = boost::geometry::index; // lets us use bgi::  instead of  boost::geometry::index::
+
+
+
+/*************************************************************************************************************************************************************************/
+/*COLOURS*/
+
+//day 
+t_color water_day(137, 229, 249, 255);
+t_color sand_day(224, 189, 114, 255);
+t_color park_day(133, 234, 133, 255);
+t_color grass_day(177, 239, 177, 255);
+t_color building_day(207, 209, 207, 255);
+t_color land_day(234, 234, 234, 255);
+t_color highway_day(247, 224, 96, 255);
+t_color road_day(255, 255, 255, 255); //Just white
+t_color intersection(224, 226, 224, 255);
+t_color names_day(126, 130, 137, 255);
+
+//night
+t_color water_night(13, 18, 35, 255);
+t_color sand_night(99, 83, 49, 255);
+t_color park_night(80, 109, 80, 255);
+t_color grass_night(80, 109, 80, 255);
+t_color building_night(74, 76, 74, 255);
+t_color land_night(45, 45, 65, 255);
+t_color highway_night(142, 129, 55, 255);
+t_color road_night(89, 89, 89, 255);
+t_color names_night(255, 255, 255, 255);
+
+//initialize to day
+t_color water = water_day;
+t_color sand = sand_day;
+t_color park = park_day;
+t_color grass = grass_day;
+t_color building = building_day;
+t_color land = land_day;
+t_color highway = highway_day;
+t_color road = road_day;
+t_color names = names_day;
+
+t_color nav_base(255, 204, 204, 255);
+t_color text_box_colour(183, 187, 208, 255);
+t_color text_box_colour2(100, 139, 148, 255);
+
+
+
+/*************************************************************************************************************************************************************************/
+/*VARIABLES*/
+
+//booleans used by buttons
+bool help = false;
+bool show_buttons = false;
+bool closest_poi = true;
+bool closest_intersection = false;
+bool external_click = false;
+bool clicked_once = false;
+double last_known_position_x;
+double last_known_position_y;
+bool has_clicked = false;
+bool day = true;
+bool tourism = false;
+bool transportation = false;
+bool emergency = false;
+bool school = false;
+bool food = false;
+bool bank = false;
+bool fuel = false;
+bool church = false;
+bool cinema = false;
+bool health = false;
+bool more = false;
+
+//INTERFACE VARIABLES
+bool first_parse = true;
+bool sidebar = false;
+bool searching_poi = false;
+bool searching_intersections = false;
+bool destination_parse = false;
+bool first_street_input = true;
+int search_bar_offset = 0;
+t_bound_box text_box;
+t_bound_box clear_box;
+t_bound_box quit_box;
+t_bound_box destination_button;
+t_bound_box suggestions_background_box;
+std::vector <std::string> info_output;
+std::string street_1;
+std::string street_2;
+int selected_suggestion = 1;
+int move_suggestion_down = 0;
+int intersection_1;
+int intersection_2;
+bool typing = false;
+bool highlight_point;
+
+
+float visible_width;
+double left_world;
+double bottom_world;
+double right_world;
+double top_world;
+LatLon clicked_on;
+std::string message = "";
+double average_latitude;
+
+/*************************************************************************************************************************************************************************/
+/*DATA STRUCTURES*/
+
+
+//data structure for OSM
+std::string map_name_;
+std::vector <OSMID> OSMID_;
+std::vector <intersection_data> intersections;
+std::vector <street_segment_data> street_segments_highways;
+unsigned street_segment_highways_size;
+std::vector <street_segment_data> street_segments_major;
+unsigned street_segment_major_size;
+std::vector <street_segment_data> street_segments_minor;
+unsigned street_segment_minor_size;
+std::vector <street_segment_data> street_segments;
+std::vector <feature_data> features_layer1;
+unsigned feature_layer1_size;
+std::vector <feature_data> features_layer2;
+unsigned feature_layer2_size;
+std::vector <OSMID> highways;
+std::unordered_map <OSMID, unsigned> OSM_nodeID_to_node_index;
+std::unordered_map <unsigned, std::string> name_from_node_index;
+
+std::unordered_map <unsigned, std::string> name_from_relation_index;
+//Vector of currently highlighted intersections
+std::vector <unsigned> currently_highlighted;
+std::vector <unsigned> found_poi;
+
+//vector of all street segment's centres
+std::vector<t_point> street_segment_centres;
+
+//Vector containing each street segment's angle of inclination
+std::vector<double> street_seg_angles;
+std::vector<t_point> intersections_cartesian;
+
+std::string key_input;
+std::string from_location;
+
+//dictionaries to use for auto correct
+std::vector<std::string> dictionary;
+std::vector<std::string> POI_names;
+std::vector<std::string> POI_names_with_duplicates; //don't use as dictionary
+std::vector<std::string> street_names;
+const std::vector<std::string> search_commands = {"search intersections", "search poi"};
+std::vector<std::string> suggestions_drawn;
+
+std::string suggestion_selected;
+std::string corrected;
+std::vector<std::string> suggestions_drawn2; //has the actual one to display like after scrolling down
+std::vector<std::string> Directions123;
+
+
+/*************************************************************************************************************************************************************************/
+
+/*FUNCTIONS*/
+
+
+void set_name(std::string map_name__) {
+    map_name_ = map_name__;
+}
+
+void close_OSM() {
+    closeOSMDatabase();
+}
+
+void load_street_name() {
+    street_names.clear();
+    std::set <std::string> a;
+    for (int i = 0; i < getNumberOfStreets(); i++) {
+        a.insert(getStreetName(i));
+    }
+    for (auto it = a.begin(); it != a.end(); it++) {
+        street_names.push_back(*it);
+    }
+
+
+}
+
+//Combine this with load_POI_names_with_duplicates
+void load_POI_names() {
+    POI_names.clear();
+    POI_names_with_duplicates.clear();
+    
+    std::set <std::string> a;
+    for (int i = 0; i < getNumberOfPointsOfInterest(); i++) {
+        a.insert(getPointOfInterestName(i));
+        POI_names_with_duplicates.push_back(getPointOfInterestName(i));
+    }
+    for (auto it = a.begin(); it != a.end(); it++) {
+        POI_names.push_back(*it);
+    }
+}
+
+void load_POI_names_with_duplicates() {
+    POI_names_with_duplicates.clear();
+    for (int i = 0; i < getNumberOfPointsOfInterest(); i++) {
+        POI_names_with_duplicates.push_back(getPointOfInterestName(i));
+    }
+}
+
+void draw_screen() {
+    visible_width = get_visible_world().get_width();
+
+    clearscreen();
+    setcolor(land);
+    t_point bot_left, top_right;
+    bot_left = get_visible_world().bottom_left();
+    top_right = get_visible_world().top_right();
+    fillrect(bot_left, top_right);
+
+
+    draw_features_layer1();
+
+    if (visible_width <= 0.001) draw_features_layer2();
+    draw_street_segment_highways();
+    draw_street_segment_major();
+    if (visible_width <= 0.002) draw_street_segment_minor();
+    draw_shortest_path();
+    write_street_names();
+    draw_points_of_interest();
+    if (sidebar) draw_sidebar();
+    //if(searching_poi) highlight_poi();
+    draw_search_bar();
+    draw_suggestions();
+    draw_directions();
+    //Draw highlighted intersections
+    draw_highlighted();
+    if(help){
+        set_coordinate_system(GL_SCREEN);
+        draw_surface(load_png_from_file("libstreetmap/resources/start_help.png"),0,0 );
+        set_coordinate_system(GL_WORLD);
+    }
+    if (external_click == true) {
+        update_message2(message);
+    }
+
+    copy_off_screen_buffer_to_screen();
+
+}
+
+void draw_map() {
+    double maximum_latitude = getIntersectionPosition(0).lat();
+    double minimum_latitude = maximum_latitude;
+    double maximum_longitude = getIntersectionPosition(0).lon();
+    double minimum_longitude = maximum_longitude;
+
+    init_graphics(map_name_, land);
+
+    load_intersection(maximum_latitude, minimum_latitude, maximum_longitude, minimum_longitude);
+    average_latitude = 0.5 * (maximum_latitude - minimum_latitude);
+    //    load_street_segment();
+    load_features();
+    load_intersections_cartesian();
+    load_street_name_positions();
+    load_street_name_angles();
+    load_street_name();
+    load_POI_names();
+    //    load_graph();
+    //    load_weightings();
+    //    load_connections();
+
+    left_world = longitude_to_cartesian(minimum_longitude, average_latitude);
+    bottom_world = latitude_to_cartesian(minimum_latitude);
+    right_world = longitude_to_cartesian(maximum_longitude, average_latitude);
+    top_world = latitude_to_cartesian(maximum_latitude);
+
+
+
+    set_visible_world(
+            longitude_to_cartesian(minimum_longitude, average_latitude),
+            latitude_to_cartesian(minimum_latitude),
+            longitude_to_cartesian(maximum_longitude, average_latitude),
+            latitude_to_cartesian(maximum_latitude)
+            );
+
+    //create_button("Zoom Fit", "Find", find_intersection);
+    //create_button("Find", "Info", open_external);
+    //create_button("Info", "Directions", draw_directions_box);
+    //create_button("Zoom Fit", "Find POI", find_POI);
+    create_button("Zoom Fit", "Help", show_help);
+    create_button("Help", "Filter POI", show_poi_buttons);
+    create_button("Filter POI", "Night Mode", night_mode);
+
+
+
+
+    set_drawing_buffer(OFF_SCREEN);
+    event_loop(act_on_button_press, nullptr, key_press, draw_screen);
+
+    if (external_click == true) {
+        message = "";
+        x11_close_external();
+        external_click = false;
+    }
+    day = true;
+    water = water_day;
+    sand = sand_day;
+    park = park_day;
+    grass = grass_day;
+    building = building_day;
+    land = land_day;
+    highway = highway_day;
+    road = road_day;
+    names = names_day;
+
+    close_graphics();
+}
+
+
+
+/*************************************************************************************************************************************************************************/
+
+/*BUTTON FUNCTIONS*/
+void show_help(void (*drawscreen)()) {
+    if (!help) {
+        
+        
+        help = true;
+    } else {
+        //hide help stuff
+        help = false;
+    }
+    draw_screen();
+}
+
+void show_poi_buttons(void (*drawscreen)()) {
+    if (!show_buttons) {
+        create_button("Night Mode", "Clear", clear_pois);
+        create_button("Clear", "Banks", show_bank_pois);
+        create_button("Banks", "Churches", show_church_pois);
+        create_button("Churches", "Cinema", show_cinema_pois);
+        create_button("Cinema", "Emergency", show_emergency_pois);
+        create_button("Emergency", "Food", show_food_pois);
+        create_button("Food", "Fuel", show_fuel_pois);
+        create_button("Fuel", "Health", show_health_pois);
+        create_button("Health", "Schools", show_school_pois);
+        create_button("Schools", "Tourism", show_tourism_pois);
+        create_button("Tourism", "Transport", show_transportation_pois);
+        create_button("Transport", "More POI", show_more_pois);
+        show_buttons = true;
+    } else {
+        destroy_button("Clear");
+        destroy_button("Banks");
+        destroy_button("Churches");
+        destroy_button("Cinema");
+        destroy_button("Emergency");
+        destroy_button("Food");
+        destroy_button("Fuel");
+        destroy_button("Health");
+        destroy_button("Schools");
+        destroy_button("Tourism");
+        destroy_button("Transport");
+        destroy_button("More POI");
+        show_buttons = false;
+    }
+}
+
+void night_mode(void (*drawScreen)()) {
+    if (!day) {
+        water = water_day;
+        sand = sand_day;
+        park = park_day;
+        grass = grass_day;
+        building = building_day;
+        land = land_day;
+        highway = highway_day;
+        road = road_day;
+        names = names_day;
+        day = true;
+    } else {
+        water = water_night;
+        sand = sand_night;
+        park = park_night;
+        grass = grass_night;
+        building = building_night;
+        land = land_night;
+        highway = highway_night;
+        road = road_night;
+        names = names_night;
+        day = false;
+    }
+    draw_screen();
+}
+
+std::vector<std::string> compare_street_names(std::string name) {
+    std::vector<std::string> found_names;
+    for (int i = 0; i < getNumberOfStreets(); i++) {
+        if (std::strncmp(name.c_str(), street_names[i].c_str(), name.size()) == 0) {
+            found_names.push_back(street_names[i]);
+        }
+    }
+    return (found_names);
+}
+
+std::vector<std::string> compare_street_names2(std::string name) {
+    std::vector<std::string> found_names;
+    for (int i = 0; i < getNumberOfStreets(); i++) {
+        if (std::strcmp(name.c_str(), street_names[i].c_str()) == 0) {
+            found_names.push_back(street_names[i]);
+        }
+    }
+    return (found_names);
+}
+
+void autocomplete(std::string & input_) {
+    struct termios old_terminal_config, new_terminal_config;
+    char c;
+    bool is_suggestion_different;
+    bool temp_name_diff = false;
+    std::string temp_vector;
+    std::vector<std::string> temp_found_names;
+
+    //get's the current regular terminal configuration
+    tcgetattr(STDIN_FILENO, &old_terminal_config);
+
+    //new_terminal_config will have similar traits as original but disabled buffer and local echo
+    new_terminal_config = old_terminal_config;
+    new_terminal_config.c_lflag &= (~ICANON & ~ECHO);
+
+    //sets the configuration of the terminal to the new_terminal_config
+    tcsetattr(STDIN_FILENO, TCSANOW, &new_terminal_config);
+
+    //Checks character inputted if backspace, will rewrite with a blank. What happens in the terminal is
+    //just to show users. The characters are put into a string which accounts for backspaces and the 
+    //enter is to make sure the enter isn't inputted into the string
+    do {
+        c = getchar();
+        if (c == '\n') {
+
+        } else if (c == '\b' && input_.size() == 0) {
+
+        } else if (c == '\b' && input_.size() != 0) {
+            std::cout << c;
+            std::cout << " ";
+            std::cout << c;
+            input_.pop_back();
+        } else {
+            std::cout << c;
+            input_.push_back(c);
+        }
+
+        //Checks the street_names if 3 or more letters are entered
+        if (input_.size() > 2) {
+            temp_found_names = compare_street_names(input_);
+            if (temp_found_names.size() > 1) {
+                for (int k = 0; k < temp_found_names.size() - 1; k++) {
+                    if (temp_found_names[0] != temp_found_names[k]) {
+                        temp_name_diff = true;
+                    }
+                }
+            }
+            if (temp_found_names.size() == 1 || temp_name_diff == true) {
+                //           std::cout << "\n" << "Do you mean " << temp_found_names[0];
+            }
+        }
+
+    } while (c != '\n');
+    if (temp_found_names.size() > 1) {
+        input_ = temp_found_names[0];
+    }
+    std::cout << "\n";
+
+    //return to previous terminal setting
+    tcsetattr(STDIN_FILENO, TCSANOW, &old_terminal_config);
+    return;
+}
+
+void autocorrect(std::string & input_) {
+    std::string temp;
+    std::string found;
+    int difference = 0;
+    int difference2 = 0;
+    //    temp = temp.insert(1, "hhelloo", 1, 5);
+    //    std::cout << temp << "\n";
+
+    std::vector<std::string> temp_found_names;
+    //temp_found_names = compare_street_names2(input_);
+    if (temp_found_names.size() == 0) {
+        for (int i = 0; i < getNumberOfStreets(); i++) {
+            difference = street_names[i].size() - input_.size();
+            difference2 = std::abs(difference);
+            if (difference2 < 2) {
+                for (int j = 0; j < street_names[i].size() + 1; j++) {
+
+                    //Forgot a letter
+                    if (j < street_names[i].size()) {
+                        temp = input_;
+                        temp = temp.insert(j, street_names[i], j, 1);
+                        if (std::strcmp(temp.c_str(), street_names[i].c_str()) == 0) {
+                            found = street_names[i];
+                        }
+                    }
+
+                    //Replaced a letter
+                    if (j < street_names[i].size()) {
+                        temp = input_;
+                        temp = temp.insert(j, street_names[i], j, 1);
+                        temp = temp.erase(j + 1, 1);
+                        if (std::strcmp(temp.c_str(), street_names[i].c_str()) == 0) {
+                            found = street_names[i];
+                        }
+                    }
+
+                    //added a letter 
+                    if (difference <= 0) {
+                        temp = input_;
+                        temp = temp.erase(j, 1);
+                        if (std::strcmp(temp.c_str(), street_names[i].c_str()) == 0) {
+                            found = street_names[i];
+                        }
+                    }
+                    //swapped two letter
+                    if (j < street_names[i].size() - 1) {
+                        temp = input_;
+                        std::swap(temp[j], temp[j + 1]);
+                        if (std::strcmp(temp.c_str(), street_names[i].c_str()) == 0) {
+                            found = street_names[i];
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if (found.empty()) {
+        std::cout << "Can't find any similar names\n";
+    } else {
+        std::cout << "Did you mean " << found << "\n";
+    }
+
+    return;
+}
+
+void find_intersection(std::string street1, std::string street2) {
+    // un-highlights the previously highlighted intersection
+    for (unsigned i = 0; i < currently_highlighted.size(); i++) {
+        intersections[currently_highlighted[i]].highlighted = false;
+    }
+    currently_highlighted = {};
+
+    // Street names must be exactly the same
+    // Case sensitive and Whitespace sensitive 
+    autocomplete(street1);
+    // right now auto complete automatically handles 
+    autocorrect(street1);
+    autocomplete(street2);
+    autocorrect(street2);
+    //std::cout << "Entered " << street2 << "\n";
+    //  getline(std::cin, street2, '\n');
+
+    currently_highlighted = find_intersection_ids_from_street_names(street1, street2);
+
+    if (external_click == false) {
+        x11_build_external();
+        external_click = true;
+    }
+
+    if (currently_highlighted.empty()) info_output.push_back("No Intersection Could Be Found!");
+    // else info_output = "Intersection ID: " + std::to_string(currently_highlighted[i]) + ", Name: " + intersections[currently_highlighted[i]].name;
+    std::string temp_msg;
+
+    for (unsigned i = 0; i < currently_highlighted.size(); i++) {
+        //
+        temp_msg = "Intersection ID: " + std::to_string(currently_highlighted[i]) + ", Name: " + intersections[currently_highlighted[i]].name + '\n';
+        // msg = msg + temp_msg;
+        intersections[currently_highlighted[i]].highlighted = true;
+    }
+    info_output.push_back(temp_msg);
+
+    double max_lat, max_lon, min_lat, min_lon;
+    double x_left, x_right, y_top, y_bot;
+    if (currently_highlighted.size() > 0) {
+        max_lat = intersections[currently_highlighted[0]].position.lat();
+        max_lon = intersections[currently_highlighted[0]].position.lon();
+        min_lat = max_lat;
+        min_lon = max_lon;
+        for (unsigned i = 1; i < currently_highlighted.size(); i++) {
+            max_lat = std::max(intersections[currently_highlighted[i]].position.lat(), max_lat);
+            max_lon = std::max(intersections[currently_highlighted[i]].position.lon(), max_lon);
+            min_lat = std::min(intersections[currently_highlighted[i]].position.lat(), max_lat);
+            min_lon = std::min(intersections[currently_highlighted[i]].position.lon(), max_lon);
+        }
+        x_left = (longitude_to_cartesian(min_lon, average_latitude) - 0.0001);
+        x_right = (longitude_to_cartesian(max_lon, average_latitude) + 0.0001);
+        y_top = (latitude_to_cartesian(max_lat) + 0.0001);
+        y_bot = (latitude_to_cartesian(min_lat) - 0.0001);
+
+        // zooms into intersection
+        // zoom_intersection(x_left, x_right, y_top, y_bot, drawscreen);
+    }
+}
+
+void find_POIs_from_name(std::string POI_name) {
+    for (unsigned i = 0; i < getNumberOfPointsOfInterest(); i++) {
+        //        std::cout << POI_names_with_duplicates[i] << std::endl;
+        if (std::strcmp(POI_names_with_duplicates[i].c_str(), POI_name.c_str()) == 0) {
+            std::cout << "hi";
+        }
+    }
+}
+
+void find_POI() {
+    std::string POI_name;
+
+    std::cout << "POI: ";
+    getline(std::cin, POI_name, '\n');
+    find_POIs_from_name(POI_name);
+}
+
+std::vector<unsigned> find_POI2(std::string POI_name) {
+    std::vector<unsigned> a;
+    for (unsigned i = 0; i < getNumberOfPointsOfInterest(); i++) {
+        //        std::cout << POI_names_with_duplicates[i] << std::endl;
+        if (std::strcmp(POI_names_with_duplicates[i].c_str(), POI_name.c_str()) == 0) {
+            a.push_back(i);
+        }
+    }
+    return a;
+}
+
+void open_external(void (*drawscreen)()) {
+    if (external_click == false) {
+        x11_build_external();
+        external_click = true;
+    } else {
+        message = "";
+        x11_close_external();
+        external_click = false;
+    }
+
+}
+
+void clear_pois(void (*drawscreen)()) {
+    tourism = false;
+    transportation = false;
+    emergency = false;
+    school = false;
+    food = false;
+    bank = false;
+    fuel = false;
+    church = false;
+    cinema = false;
+    health = false;
+    more = false;
+    draw_screen();
+}
+
+void show_bank_pois(void (*drawScreen)()) {
+    if (!bank) {
+        //tourism_button = map_data->tourism_pois;
+        bank = true;
+    } else {
+        //tourism_button.clear();
+        bank = false;
+    }
+    draw_screen();
+}
+
+void show_church_pois(void (*drawScreen)()) {
+    if (!church) {
+        //tourism_button = map_data->tourism_pois;
+        church = true;
+    } else {
+        //tourism_button.clear();
+        church = false;
+    }
+    draw_screen();
+}
+
+void show_cinema_pois(void (*drawScreen)()) {
+    if (!cinema) {
+        //tourism_button = map_data->tourism_pois;
+        cinema = true;
+    } else {
+        //tourism_button.clear();
+        cinema = false;
+    }
+    draw_screen();
+}
+
+void show_fuel_pois(void (*drawScreen)()) {
+    if (!fuel) {
+        //tourism_button = map_data->tourism_pois;
+        fuel = true;
+    } else {
+        //tourism_button.clear();
+        fuel = false;
+    }
+    draw_screen();
+}
+
+void show_health_pois(void (*drawScreen)()) {
+    if (!health) {
+        //tourism_button = map_data->tourism_pois;
+        health = true;
+    } else {
+        //tourism_button.clear();
+        health = false;
+    }
+    draw_screen();
+}
+
+void show_more_pois(void (*drawScreen)()) {
+    if (!more) {
+        //tourism_button = map_data->tourism_pois;
+        more = true;
+    } else {
+        //tourism_button.clear();
+        more = false;
+    }
+    draw_screen();
+}
+
+void show_transportation_pois(void (*drawScreen)()) {
+    if (!transportation) {
+        //tourism_button = map_data->tourism_pois;
+        transportation = true;
+    } else {
+        //tourism_button.clear();
+        transportation = false;
+    }
+    draw_screen();
+}
+
+void show_emergency_pois(void (*drawScreen)()) {
+    if (!emergency) {
+        //tourism_button = map_data->tourism_pois;
+        emergency = true;
+    } else {
+        //tourism_button.clear();
+        emergency = false;
+    }
+    draw_screen();
+}
+
+void show_school_pois(void (*drawScreen)()) {
+    if (!school) {
+        //tourism_button = map_data->tourism_pois;
+        school = true;
+    } else {
+        //tourism_button.clear();
+        school = false;
+    }
+    draw_screen();
+}
+
+void show_food_pois(void (*drawScreen)()) {
+    if (!food) {
+        //tourism_button = map_data->tourism_pois;
+        food = true;
+    } else {
+        //tourism_button.clear();
+        food = false;
+    }
+    draw_screen();
+}
+
+void show_tourism_pois(void (*drawScreen)()) {
+    if (!tourism) {
+        //tourism_button = map_data->tourism_pois;
+        tourism = true;
+    } else {
+        //tourism_button.clear();
+        tourism = false;
+    }
+    draw_screen();
+}
+
+
+/*************************************************************************************************************************************************************************/
+
+/*LOAD FUNCTIONS*/
+
+
+void load_OSM_nodeID_to_node_index() {
+    for (unsigned i = 0; i < getNumberOfNodes(); i++) {
+        const OSMNode* node = getNodeByIndex(i);
+        OSM_nodeID_to_node_index.insert({node->id(), i});
+    }
+}
+
+bool load_OSM(std::string osm_path) {
+    bool load_successful = false;
+    std::pair<std::string, std::string> motorway("highway", "motorway");
+    std::pair<std::string, std::string> trunk("highway", "trunk");
+
+    load_successful = loadOSMDatabaseBIN(osm_path);
+
+    if (!load_successful)
+        return false;
+
+    load_OSM_nodeID_to_node_index();
+
+    for (unsigned j = 0; j < getNumberOfWays(); j++) {
+        //Checks which street OSMID corresponds to which OSMWay's OSMID, the compare the tags
+        for (unsigned i = 0; i < getTagCount(getWayByIndex(j)); ++i) {
+            if (motorway == getTagPair(getWayByIndex(j), i) || trunk == getTagPair(getWayByIndex(j), i)) {
+                highways.push_back(getWayByIndex(j)->id());
+            }
+        }
+
+    }
+    return load_successful;
+}
+bool load_OSM2(std::string osm_path) {
+
+    
+for (unsigned i = 0; i < getNumberOfNodes(); i++) {
+        for (unsigned j = 0; j < getTagCount(getNodeByIndex(i)); j++) {
+            std::string key, value;
+            std::tie(key, value) = getTagPair(getNodeByIndex(i), j);
+            //sort airports, subway, and tourism
+            if (key == "name") name_from_node_index.insert({i, value});
+            if ((key == "aeroway") && (value == "aerodrome")) map_data->airport_pois.push_back(i);
+            else if ((key == "railway") && (value == "subway_entrance")) map_data->subway_pois.push_back(i);
+            else if (key == "tourism") {
+                if ((value == "attraction") || (value == "aquarium") || (value == "gallery") || (value == "museum") || (value == "theme_park") || (value == "zoo")) {
+                    map_data->tourism_pois.push_back(i);
+                }
+            }
+        }
+    }
+
+    for (unsigned i = 0; i < getNumberOfRelations(); i++) {
+        for (unsigned j = 0; j < getTagCount(getRelationByIndex(i)); j++) {
+            std::string key, value;
+            std::tie(key, value) = getTagPair(getRelationByIndex(i), j);
+            if (key == "name") name_from_relation_index.insert({i, value});
+            if ((key == "place") && (value == "neighbourhood")) {
+                map_data->neighbourhoods.push_back(i);
+            }
+        }
+    }
+    map_data->load_POI_data_structures(); //needs info from loading OSM POI
+    return true;
+}
+
+void load_intersection(double & maximum_latitude_, double & minimum_latitude_, double & maximum_longitude_, double & minimum_longitude_) {
+    intersections.resize(getNumberOfIntersections());
+    for (unsigned id = 0; id < intersections.size(); id++) {
+        intersections[id].position = getIntersectionPosition(id);
+        intersections[id].name = getIntersectionName(id);
+        maximum_latitude_ = std::max(maximum_latitude_, intersections[id].position.lat());
+        minimum_latitude_ = std::min(minimum_latitude_, intersections[id].position.lat());
+        maximum_longitude_ = std::max(maximum_longitude_, intersections[id].position.lon());
+        minimum_longitude_ = std::min(minimum_longitude_, intersections[id].position.lon());
+    }
+}
+
+//Pre-loads a data structure that contains the cartesian coordinates for each intersection
+//Eliminates some overhead from calling the latlon to cartesian function each time
+
+void load_intersections_cartesian() {
+    intersections_cartesian.clear();
+    unsigned num_intersections = getNumberOfIntersections();
+    t_point cartesian;
+
+    for (unsigned i = 0; i < num_intersections; i++) {
+        LatLon intersection_position = getIntersectionPosition(i);
+        cartesian.x = longitude_to_cartesian(intersection_position.lon(), average_latitude);
+        cartesian.y = latitude_to_cartesian(intersection_position.lat());
+        intersections_cartesian.push_back(cartesian);
+    }
+}
+
+void load_street_segment() {
+    street_segment_highways_size = 0;
+    street_segment_major_size = 0;
+    street_segment_minor_size = 0;
+    street_segments_highways.clear();
+    street_segments_major.clear();
+    street_segments_minor.clear();
+    street_segments.clear();
+
+    bool is_it_highway = false;
+    int a = 0;
+    street_segment_data temp_street;
+    for (unsigned id = 0; id < getNumberOfStreetSegments(); id++) {
+        temp_street.StreetSegmentInfo_ = getStreetSegmentInfo(id);
+        temp_street.id = id;
+        temp_street.oneWay = temp_street.StreetSegmentInfo_.oneWay;
+
+        //Push_back into street segment vector every-time because it is still being used 
+        street_segments.push_back(temp_street);
+        //map_data->street_segments2.push_back(temp_street);
+
+        //https://wiki.openstreetmap.org/wiki/Key:highway
+        for (unsigned j = 0; j < highways.size(); j++) {
+            //Checks which street OSMID corresponds to which OSMWay's OSMID, the compare the tags
+            if (temp_street.StreetSegmentInfo_.wayOSMID == highways[j]) {
+                is_it_highway = true;
+            }
+        }
+
+        if (is_it_highway) {
+            temp_street.street_segment_type = Highway;
+            street_segments_highways.push_back(temp_street);
+            //           street_segments.push_back(temp_street);
+            street_segment_highways_size++;
+        } else if (temp_street.StreetSegmentInfo_.speedLimit > 50) {
+            temp_street.street_segment_type = Major;
+            street_segments_major.push_back(temp_street);
+            //          street_segments.push_back(temp_street);
+            street_segment_major_size++;
+        } else {
+            temp_street.street_segment_type = Minor;
+            street_segments_minor.push_back(temp_street);
+            //       street_segments.push_back(temp_street);
+            street_segment_minor_size++;
+        }
+        is_it_highway = false;
+    }
+}
+
+void load_features() {
+    feature_layer1_size = 0;
+    feature_layer2_size = 0;
+    features_layer1.clear();
+    features_layer2.clear();
+    features_layer1.resize(getNumberOfFeatures());
+    for (unsigned id = 0; id < getNumberOfFeatures(); id++) {
+
+        feature_data temp_feature;
+        temp_feature.feature_id = id;
+        temp_feature.feature_name = getFeatureName(id);
+        temp_feature.feature_type = getFeatureType(id);
+        temp_feature.feature_OSMID = getFeatureOSMID(id);
+        temp_feature.feature_pointCount = getFeaturePointCount(id);
+        temp_feature.feature_featurePoint.resize(getFeaturePointCount(id));
+        for (unsigned i = 0; i < temp_feature.feature_featurePoint.size(); i++) {
+            temp_feature.feature_featurePoint[i].x = longitude_to_cartesian(getFeaturePoint(id, i).lon(), average_latitude);
+            temp_feature.feature_featurePoint[i].y = latitude_to_cartesian(getFeaturePoint(id, i).lat());
+        }
+        if ((temp_feature.feature_featurePoint[0].x == temp_feature.feature_featurePoint[temp_feature.feature_pointCount - 1].x)
+                && (temp_feature.feature_featurePoint[0].y == temp_feature.feature_featurePoint[temp_feature.feature_pointCount - 1].y)) {
+            temp_feature.area = polygon_area(temp_feature.feature_featurePoint, temp_feature.feature_pointCount);
+            if (temp_feature.area > 1e-8) {//|| temp_feature.feature_type == Island){
+                temp_feature.feature_type_importance = LargeClosed;
+                features_layer1.push_back(temp_feature);
+                feature_layer1_size++;
+            } else {
+                temp_feature.feature_type_importance = SmallClosed;
+                features_layer2.push_back(temp_feature);
+                feature_layer2_size++;
+            }
+        } else {
+            temp_feature.area = line_length(temp_feature.feature_featurePoint, temp_feature.feature_pointCount) * 1e-30;
+            if (temp_feature.area > 1e-8) {// || temp_feature.feature_type == Island){
+                temp_feature.feature_type_importance = SmallOpen;
+                features_layer2.push_back(temp_feature);
+                feature_layer2_size++;
+            } else {
+                temp_feature.feature_type_importance = SmallOpen;
+                features_layer2.push_back(temp_feature);
+                feature_layer2_size++;
+            }
+        }
+    }
+    std::sort(features_layer1.begin(), features_layer1.end(), compare_area);
+    std::sort(features_layer2.begin(), features_layer2.end(), compare_area);
+
+}
+
+//For every street segment id, find the centre of the segment (in cartesian coordinates), load this into a pre-loaded vector
+//This is where the name of the street will be written 
+//For every street intersection, load its angle 
+//This is used for knowing what angle to write the street names
+
+void load_street_name_positions() {
+
+    int num_segs = getNumberOfStreetSegments();
+
+    t_point coords;
+
+    street_segment_centres.resize(num_segs);
+
+    for (unsigned i = 0; i < street_segment_highways_size; i++) {
+
+        IntersectionIndex intersection_id_from = street_segments_highways[i].StreetSegmentInfo_.from;
+        IntersectionIndex intersection_id_to = street_segments_highways[i].StreetSegmentInfo_.to;
+        int num_curve_points = street_segments_highways[i].StreetSegmentInfo_.curvePointCount;
+
+        //If there are no curve points, the centre of the street is the average of the to and from points 
+        if (num_curve_points == 0) {
+            double x_from = intersections_cartesian[intersection_id_from].x;
+            double y_from = intersections_cartesian[intersection_id_from].y;
+            double x_to = intersections_cartesian[intersection_id_to].x;
+            double y_to = intersections_cartesian[intersection_id_to].y;
+
+            coords.x = (x_to + x_from) / 2.0;
+            coords.y = (y_to + y_from) / 2.0;
+            street_segment_centres[street_segments_highways[i].id] = coords;
+        }//if there are curve point, make the centre of the street segment the middle curve point
+        else {
+            coords.x = longitude_to_cartesian(getStreetSegmentCurvePoint(street_segments_highways[i].id, num_curve_points / 2).lon(), average_latitude);
+            coords.y = latitude_to_cartesian(getStreetSegmentCurvePoint(street_segments_highways[i].id, num_curve_points / 2).lat());
+            street_segment_centres[street_segments_highways[i].id] = coords;
+        }
+    }
+
+    for (unsigned i = 0; i < street_segment_major_size; i++) {
+
+        IntersectionIndex intersection_id_from = street_segments_major[i].StreetSegmentInfo_.from;
+        IntersectionIndex intersection_id_to = street_segments_major[i].StreetSegmentInfo_.to;
+        int num_curve_points = street_segments_major[i].StreetSegmentInfo_.curvePointCount;
+
+        //If there are no curve points, the centre of the street is the average of the to and from points 
+        if (num_curve_points == 0) {
+            double x_from = intersections_cartesian[intersection_id_from].x;
+            double y_from = intersections_cartesian[intersection_id_from].y;
+            double x_to = intersections_cartesian[intersection_id_to].x;
+            double y_to = intersections_cartesian[intersection_id_to].y;
+
+            coords.x = (x_to + x_from) / 2.0;
+            coords.y = (y_to + y_from) / 2.0;
+            street_segment_centres[street_segments_major[i].id] = coords;
+        }//if there are curve point, make the centre of the street segment the middle curve point
+        else {
+            coords.x = longitude_to_cartesian(getStreetSegmentCurvePoint(street_segments_major[i].id, num_curve_points / 2).lon(), average_latitude);
+            coords.y = latitude_to_cartesian(getStreetSegmentCurvePoint(street_segments_major[i].id, num_curve_points / 2).lat());
+            street_segment_centres[street_segments_major[i].id] = coords;
+        }
+    }
+
+    for (unsigned i = 0; i < street_segment_minor_size; i++) {
+
+        IntersectionIndex intersection_id_from = street_segments_minor[i].StreetSegmentInfo_.from;
+        IntersectionIndex intersection_id_to = street_segments_minor[i].StreetSegmentInfo_.to;
+        int num_curve_points = street_segments_minor[i].StreetSegmentInfo_.curvePointCount;
+
+        //If there are no curve points, the centre of the street is the average of the to and from points 
+        if (num_curve_points == 0) {
+            double x_from = intersections_cartesian[intersection_id_from].x;
+            double y_from = intersections_cartesian[intersection_id_from].y;
+            double x_to = intersections_cartesian[intersection_id_to].x;
+            double y_to = intersections_cartesian[intersection_id_to].y;
+
+            coords.x = (x_to + x_from) / 2.0;
+            coords.y = (y_to + y_from) / 2.0;
+            street_segment_centres[street_segments_minor[i].id] = coords;
+        }//if there are curve point, make the centre of the street segment the middle curve point
+        else {
+            coords.x = longitude_to_cartesian(getStreetSegmentCurvePoint(street_segments_minor[i].id, num_curve_points / 2).lon(), average_latitude);
+            coords.y = latitude_to_cartesian(getStreetSegmentCurvePoint(street_segments_minor[i].id, num_curve_points / 2).lat());
+            street_segment_centres[street_segments_minor[i].id] = coords;
+        }
+    }
+}
+
+//For every street intersection, load its angle 
+//This is used for knowing what angle to write the street names
+
+void load_street_name_angles() {
+
+    int num_segs = getNumberOfStreetSegments();
+    double angle;
+
+    street_seg_angles.resize(num_segs);
+
+    for (unsigned i = 0; i < street_segment_highways_size; i++) {
+        IntersectionIndex intersection_id_from = street_segments_highways[i].StreetSegmentInfo_.from;
+        IntersectionIndex intersection_id_to = street_segments_highways[i].StreetSegmentInfo_.to;
+
+        double x_from = intersections_cartesian[intersection_id_from].x;
+        double y_from = intersections_cartesian[intersection_id_from].y;
+        double x_to = intersections_cartesian[intersection_id_to].x;
+        double y_to = intersections_cartesian[intersection_id_to].y;
+
+        //Angle of street segment in degrees
+        angle = atan((y_to - y_from) / (x_to - x_from)) * 180 / PI;
+        street_seg_angles[street_segments_highways[i].id] = angle;
+        //DEBUG(angle);
+    }
+    for (unsigned i = 0; i < street_segment_major_size; i++) {
+        IntersectionIndex intersection_id_from = street_segments_major[i].StreetSegmentInfo_.from;
+        IntersectionIndex intersection_id_to = street_segments_major[i].StreetSegmentInfo_.to;
+
+        double x_from = intersections_cartesian[intersection_id_from].x;
+        double y_from = intersections_cartesian[intersection_id_from].y;
+        double x_to = intersections_cartesian[intersection_id_to].x;
+        double y_to = intersections_cartesian[intersection_id_to].y;
+
+        //Angle of street segment in degrees
+        angle = atan((y_to - y_from) / (x_to - x_from)) * 180 / PI;
+        street_seg_angles[street_segments_major[i].id] = angle;
+        //DEBUG(angle);
+    }
+    for (unsigned i = 0; i < street_segment_minor_size; i++) {
+        IntersectionIndex intersection_id_from = street_segments_minor[i].StreetSegmentInfo_.from;
+        IntersectionIndex intersection_id_to = street_segments_minor[i].StreetSegmentInfo_.to;
+
+        double x_from = intersections_cartesian[intersection_id_from].x;
+        double y_from = intersections_cartesian[intersection_id_from].y;
+        double x_to = intersections_cartesian[intersection_id_to].x;
+        double y_to = intersections_cartesian[intersection_id_to].y;
+
+        //Angle of street segment in degrees
+        angle = atan((y_to - y_from) / (x_to - x_from)) * 180 / PI;
+        street_seg_angles[street_segments_minor[i].id] = angle;
+    }
+}
+
+
+
+/*************************************************************************************************************************************************************************/
+///*DRAW FUNCTIONS*/
+
+//write street names
+
+void write_street_names() {
+
+    std::string direction;
+    int modulo_segs = 1;
+    int street_size = 80;
+
+    for (unsigned i = 0; i < getNumberOfStreets(); i++) {
+        //if not a major street, wait until it is past the following zoom threshold to write the street name
+
+        std::vector<unsigned> street_segs = map_data->get_street_street_segments(i);
+        const std::string& text = getStreetName(i);
+        if (text == "<unknown>") {
+            //Don't write the street name if it's unknown
+        } else {
+            //If within threshold value, draw street names
+            for (unsigned k = 0; k < street_segs.size(); k++) {
+                int num_curve_points = street_segments[k].StreetSegmentInfo_.curvePointCount;
+
+                StreetSegmentIndex street_seg_id = street_segs[k];
+                street_segment_data current_seg_data = street_segments[street_seg_id];
+
+                IntersectionIndex intersection_id_from = street_segments[street_seg_id].StreetSegmentInfo_.from;
+                IntersectionIndex intersection_id_to = street_segments[street_seg_id].StreetSegmentInfo_.to;
+                double x_from = intersections_cartesian[intersection_id_from].x;
+                double x_to = intersections_cartesian[intersection_id_to].x;
+                double y_from = intersections_cartesian[intersection_id_from].y;
+                double y_to = intersections_cartesian[intersection_id_to].y;
+
+                //If the segment being plotted is on the screen
+                if (get_visible_world().intersects(street_segment_centres[street_seg_id])) {
+
+                    //Highways at a zoomed out level
+                    if ((visible_width < 0.005) && (visible_width > 0.0014)) {
+                        //Write highways at a smaller amount
+
+                        if (current_seg_data.street_segment_type == Highway) {
+                            settextrotation(street_seg_angles[street_seg_id]);
+
+                            int modulo_big = 34;
+                            int modulo_small = 13;
+
+                            if (map_name_ == "Tokyo, Japan") {
+                                modulo_big = 41;
+                            }
+                            if (map_name_ == "Toronto, Canada") {
+                                modulo_big = 31;
+                            }
+                            //std:: cout<< "This is a highway " << text << std::endl;
+                            //Assume highway segments are big and it probably doesn't matter anyway when this zoomed out
+                            setcolor(names);
+                            setfontsize(9);
+                            //Draw every 7th
+                            if (street_segs.size() >= 34) {
+                                if ((k + 1) % modulo_big == 0)
+                                    if (in_window(get_visible_world(), street_segment_centres[street_seg_id].x, street_segment_centres[street_seg_id].y)) drawtext(street_segment_centres[street_seg_id].x, street_segment_centres[street_seg_id].y, text, FLT_MAX, FLT_MAX);
+                            } else {
+                                if ((k + 1) % modulo_small == 0)
+                                    if (in_window(get_visible_world(), street_segment_centres[street_seg_id].x, street_segment_centres[street_seg_id].y)) drawtext(street_segment_centres[street_seg_id].x, street_segment_centres[street_seg_id].y, text, FLT_MAX, FLT_MAX);
+                            }
+                        }
+
+                    } else if ((visible_width < 0.0014) && (visible_width > 0.0005)) {
+
+                        int modulo_highways = 23;
+                        int modulo_major = 26;
+
+                        if (map_name_ == "Saint-Helena") {
+                            modulo_major = 3;
+                        } else if (map_name_ == "Tokyo, Japan") {
+                            modulo_highways = 27;
+                            modulo_major = 29;
+                        }
+                        //Write highways at a smaller amount
+                        if (current_seg_data.street_segment_type == Highway) {
+                            settextrotation(street_seg_angles[street_seg_id]);
+
+                            //Assume highway segments are big and it probably doesn't matter anyway when this zoomed out
+                            setcolor(names);
+                            setfontsize(9);
+                            //Draw every 25th
+                            if ((k + 1) % modulo_highways == 0)
+                                if (in_window(get_visible_world(), street_segment_centres[street_seg_id].x, street_segment_centres[street_seg_id].y)) drawtext(street_segment_centres[street_seg_id].x, street_segment_centres[street_seg_id].y, text, FLT_MAX, FLT_MAX);
+                        }
+
+                        //Write major roads at a smaller amount also 
+                        if (current_seg_data.street_segment_type == Major) {
+                            settextrotation(street_seg_angles[street_seg_id]);
+
+                            //Assume highway segments are big and it probably doesn't matter anyway when this zoomed out
+                            setcolor(names);
+                            setfontsize(9);
+                            //Draw every 25th
+                            if ((k + 1) % modulo_major == 0) {
+                                if (in_window(get_visible_world(), street_segment_centres[street_seg_id].x, street_segment_centres[street_seg_id].y)) drawtext(street_segment_centres[street_seg_id].x, street_segment_centres[street_seg_id].y, text, FLT_MAX, FLT_MAX);
+                            }
+                        }
+                    }//If the current street is a highway at a certain zoom level, or a major street at a smaller zoom level or just at a relatively small zoom level
+                    else if (visible_width < 0.0005 && visible_width > 0.0003 && num_curve_points == 0) {
+
+
+                        setfontsize(0.003 / visible_width);
+                        settextrotation(street_seg_angles[street_seg_id]);
+
+                        //if one way street
+                        if (street_segments[street_seg_id].oneWay) {
+                            //check direction
+                            if (x_from < x_to) {
+                                setcolor_by_name("lightpink");
+                                direction = "→";
+                            } else if (x_from == x_to) {
+                                //Compare y_Values
+                                if (y_from < y_to) {
+                                    setcolor_by_name("lightpink");
+                                    direction = "→";
+                                } else {
+                                    setcolor_by_name("lightskyblue");
+                                    direction = "←";
+                                }
+                            } else {
+                                setcolor_by_name("lightskyblue");
+                                direction = "←";
+                            }
+                            if (in_window(get_visible_world(), street_segment_centres[street_seg_id].x, street_segment_centres[street_seg_id].y)) drawtext(street_segment_centres[street_seg_id].x, street_segment_centres[street_seg_id].y, direction, FLT_MAX, sqrt(pow((x_to - x_from), 2) + pow((y_to - y_from), 2)));
+                        }
+
+                        if (current_seg_data.street_segment_type == Highway) {
+                            modulo_segs = 4;
+                        } else if (current_seg_data.street_segment_type == Major)
+                            modulo_segs = 3;
+                        else if (text.size() > 19)
+                            modulo_segs = 3;
+                        else
+                            modulo_segs = 2;
+
+                        if (street_segs.size() > 1) {
+                            if ((k + 1) % modulo_segs == 0) {
+                                setcolor(names);
+                                if (in_window(get_visible_world(), street_segment_centres[street_seg_id].x, street_segment_centres[street_seg_id].y)) drawtext(street_segment_centres[street_seg_id].x, street_segment_centres[street_seg_id].y, text, FLT_MAX, sqrt(pow((x_to - x_from), 2) + pow((y_to - y_from), 2)));
+                            }
+                        } else {
+                            setcolor(names);
+                            if (in_window(get_visible_world(), street_segment_centres[street_seg_id].x, street_segment_centres[street_seg_id].y)) drawtext(street_segment_centres[street_seg_id].x, street_segment_centres[street_seg_id].y, text, FLT_MAX, sqrt(pow((x_to - x_from), 2) + pow((y_to - y_from), 2)));
+                        }
+                    } else if (visible_width < 0.0003 && visible_width > 0.00014 && num_curve_points > 0) {
+                        setfontsize(0.002 / visible_width);
+                        settextrotation(street_seg_angles[street_seg_id]);
+
+                        if (map_name_ == "Cairo, Egypt") {
+                            street_size = 1;
+                        } else if (map_name_ == "New-York, USA") {
+                            street_size = 0;
+                        } else if (map_name_ == "Sydney, Australia") {
+                            street_size = 0;
+                        } else if (map_name_ == "Toronto, Canada") {
+                            street_size = 30;
+                        }
+
+                        IntersectionIndex intersection_id_from = street_segments[street_seg_id].StreetSegmentInfo_.from;
+                        IntersectionIndex intersection_id_to = street_segments[street_seg_id].StreetSegmentInfo_.to;
+                        double x_from = intersections_cartesian[intersection_id_from].x;
+                        double x_to = intersections_cartesian[intersection_id_to].x;
+                        double y_from = intersections_cartesian[intersection_id_from].y;
+                        double y_to = intersections_cartesian[intersection_id_to].y;
+
+                        //if one way street
+                        if (street_segments[street_seg_id].oneWay) {
+                            //check direction
+                            if (x_from < x_to) {
+                                setcolor_by_name("lightpink");
+                                direction = "→";
+                            } else if (x_from == x_to) {
+                                //Compare y_Values
+                                if (y_from < y_to) {
+                                    setcolor_by_name("lightpink");
+                                    direction = "→";
+                                } else {
+                                    setcolor_by_name("lightskyblue");
+                                    direction = "←";
+                                }
+                            } else {
+                                setcolor_by_name("lightskyblue");
+                                direction = "←";
+                            }
+                            if (in_window(get_visible_world(), street_segment_centres[street_seg_id].x, street_segment_centres[street_seg_id].y)) drawtext(street_segment_centres[street_seg_id].x, street_segment_centres[street_seg_id].y, direction, FLT_MAX, FLT_MAX);
+                        }
+
+                        if (current_seg_data.street_segment_type == Highway) {
+                            modulo_segs = 4;
+                        } else if (current_seg_data.street_segment_type == Major) {
+
+                            if (map_name_ == "Singapore") {
+                                modulo_segs = 7;
+                            } else if (map_name_ == "Toronto, Canada") {
+                                modulo_segs = 7;
+                            } else
+                                modulo_segs = 3;
+                        } else if (text.size() > 19)
+                            modulo_segs = 3;
+                        else {
+                            if (map_name_ == "Toronto, Canada") {
+                                modulo_segs = 3;
+                            } else
+                                modulo_segs = 2;
+                        }
+
+                        if ((find_street_segment_length(street_seg_id) > street_size)) {
+                            if (street_segs.size() > 1) {
+                                if ((k + 1) % modulo_segs == 0) {
+                                    setcolor(names);
+                                    if (in_window(get_visible_world(), street_segment_centres[street_seg_id].x, street_segment_centres[street_seg_id].y)) drawtext(street_segment_centres[street_seg_id].x, street_segment_centres[street_seg_id].y, text, FLT_MAX, FLT_MAX);
+                                }
+                            } else {
+                                setcolor(names);
+                                if (in_window(get_visible_world(), street_segment_centres[street_seg_id].x, street_segment_centres[street_seg_id].y)) drawtext(street_segment_centres[street_seg_id].x, street_segment_centres[street_seg_id].y, text, FLT_MAX, FLT_MAX);
+                            }
+                        } else {
+                            std::vector<unsigned> big_segs;
+                            //Loop through street segs until you find one thats not tiny
+                            for (unsigned j = k; j < street_segs.size(); j++) {
+                                //Draw it on the next segment
+                                if (find_street_segment_length(street_seg_id) > 150) {
+                                    big_segs.push_back(street_seg_id);
+                                }
+                            }
+                            if (big_segs.size() == 0) {
+                                if ((k + 1) % modulo_segs == 0) {
+                                    setcolor(names);
+                                    if (in_window(get_visible_world(), street_segment_centres[street_seg_id].x, street_segment_centres[street_seg_id].y)) drawtext(street_segment_centres[street_seg_id].x, street_segment_centres[street_seg_id].y, text, FLT_MAX, FLT_MAX);
+                                }
+                            } else {
+                                setcolor(names);
+                                if (in_window(get_visible_world(), street_segment_centres[street_seg_id].x, street_segment_centres[street_seg_id].y)) drawtext(street_segment_centres[street_seg_id].x, street_segment_centres[street_seg_id].y, text, FLT_MAX, FLT_MAX);
+                            }
+
+                        }
+                    } else if (visible_width < 0.00014 && num_curve_points > 0) {
+                        setfontsize(0.001 / visible_width);
+                        settextrotation(street_seg_angles[street_seg_id]);
+
+                        IntersectionIndex intersection_id_from = street_segments[street_seg_id].StreetSegmentInfo_.from;
+                        IntersectionIndex intersection_id_to = street_segments[street_seg_id].StreetSegmentInfo_.to;
+                        double x_from = intersections_cartesian[intersection_id_from].x;
+                        double x_to = intersections_cartesian[intersection_id_to].x;
+                        double y_from = intersections_cartesian[intersection_id_from].y;
+                        double y_to = intersections_cartesian[intersection_id_to].y;
+
+                        //if one way street
+                        if (street_segments[street_seg_id].oneWay) {
+                            //check direction
+                            if (x_from < x_to) {
+                                setcolor_by_name("lightpink");
+                                direction = "→";
+                            } else if (x_from == x_to) {
+                                //Compare y_Values
+                                if (y_from < y_to) {
+                                    setcolor_by_name("lightpink");
+                                    direction = "→";
+                                } else {
+                                    setcolor_by_name("lightskyblue");
+                                    direction = "←";
+                                }
+                            } else {
+                                setcolor_by_name("lightskyblue");
+                                direction = "←";
+                            }
+                            if (in_window(get_visible_world(), street_segment_centres[street_seg_id].x, street_segment_centres[street_seg_id].y)) drawtext(street_segment_centres[street_seg_id].x, street_segment_centres[street_seg_id].y, direction, FLT_MAX, FLT_MAX);
+                        }
+
+                        if (current_seg_data.street_segment_type == Highway) {
+                            modulo_segs = 3;
+                        } else if (current_seg_data.street_segment_type == Major) {
+                            modulo_segs = 4;
+                            if (map_name_ == "Singapore") {
+                                modulo_segs = 7;
+                            }
+                        }//                        else if(text.size() > 19)
+                            //                            modulo_segs = 2;
+                        else
+                            modulo_segs = 2;
+
+                        if (street_segs.size() >= 4) {
+                            if (street_segs.size() > 4 && ((k + 1) % modulo_segs == 0)) {
+                                setcolor(names);
+                                if (in_window(get_visible_world(), street_segment_centres[street_seg_id].x, street_segment_centres[street_seg_id].y)) drawtext(street_segment_centres[street_seg_id].x, street_segment_centres[street_seg_id].y, text, FLT_MAX, FLT_MAX);
+                            } else if (street_segs.size() == 4 && ((k + 1) % 2 == 0)) {
+                                setcolor(names);
+                                if (in_window(get_visible_world(), street_segment_centres[street_seg_id].x, street_segment_centres[street_seg_id].y)) drawtext(street_segment_centres[street_seg_id].x, street_segment_centres[street_seg_id].y, text, FLT_MAX, FLT_MAX);
+                            }
+                        } else if (street_segs.size() == 2 || street_segs.size() == 3) {
+                            if ((k + 1) % 2 == 0) {
+                                setcolor(names);
+                                if (in_window(get_visible_world(), street_segment_centres[street_seg_id].x, street_segment_centres[street_seg_id].y)) drawtext(street_segment_centres[street_seg_id].x, street_segment_centres[street_seg_id].y, text, FLT_MAX, FLT_MAX);
+                            }
+                        } else {
+                            setcolor(names);
+                            if (in_window(get_visible_world(), street_segment_centres[street_seg_id].x, street_segment_centres[street_seg_id].y)) drawtext(street_segment_centres[street_seg_id].x, street_segment_centres[street_seg_id].y, text, FLT_MAX, FLT_MAX);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+//draws the highlighted intersections;
+
+void draw_highlighted() {
+    setcolor_by_name("red");
+    for (unsigned i = 0; i < currently_highlighted.size(); i++) {
+        t_point coords;
+        coords.x = longitude_to_cartesian(intersections[currently_highlighted[i]].position.lon(), average_latitude);
+        coords.y = latitude_to_cartesian(intersections[currently_highlighted[i]].position.lat());
+        coords = POI_offset(coords);
+        draw_surface(load_png_from_file("libstreetmap/resources/intersection.png"), coords.x, coords.y);
+    }
+}
+
+//Draws the highways
+
+void draw_street_segment_highways() {
+    setlinewidth(0.004 / visible_width);
+    setcolor(highway);
+    
+
+    for (unsigned i = 0; i < street_segment_highways_size; i++) {
+//        if(street_segments[street_segments_highways[i].id].highlight)
+//            setcolor(RED);
+//        else
+//            setcolor(highway);
+
+        IntersectionIndex intersection_id_from = street_segments_highways[i].StreetSegmentInfo_.from;
+        IntersectionIndex intersection_id_to = street_segments_highways[i].StreetSegmentInfo_.to;
+
+        if (street_segments_highways[i].StreetSegmentInfo_.curvePointCount == 0) {
+
+            double x_from = intersections_cartesian[intersection_id_from].x;
+            double y_from = intersections_cartesian[intersection_id_from].y;
+            double x_to = intersections_cartesian[intersection_id_to].x;
+            double y_to = intersections_cartesian[intersection_id_to].y;
+
+            drawline(x_from, y_from, x_to, y_to);
+
+        }//If the street is curved
+        else {
+            // Street "from" point
+
+            double startx1 = intersections_cartesian[intersection_id_from].x;
+            double starty1 = intersections_cartesian[intersection_id_from].y;
+
+            // First curve point
+            double startx2 = longitude_to_cartesian(getStreetSegmentCurvePoint(street_segments_highways[i].id, 0).lon(), average_latitude);
+            double starty2 = latitude_to_cartesian(getStreetSegmentCurvePoint(street_segments_highways[i].id, 0).lat());
+
+            drawline(startx1, starty1, startx2, starty2);
+
+            // First curve point is now the new starting points
+            startx1 = startx2;
+            starty1 = starty2;
+
+            for (unsigned k = 1; k < street_segments_highways[i].StreetSegmentInfo_.curvePointCount; k++) {
+                startx2 = longitude_to_cartesian(getStreetSegmentCurvePoint(street_segments_highways[i].id, k).lon(), average_latitude);
+                starty2 = latitude_to_cartesian(getStreetSegmentCurvePoint(street_segments_highways[i].id, k).lat());
+                drawline(startx1, starty1, startx2, starty2);
+
+                startx1 = startx2;
+                starty1 = starty2;
+
+            }
+            //Draw from the last curve point to streetsegment.to
+            startx2 = intersections_cartesian[intersection_id_to].x;
+            starty2 = intersections_cartesian[intersection_id_to].y;
+
+            drawline(startx1, starty1, startx2, starty2);
+
+        }
+    }
+}
+
+//Draws all the streets classified as major streets
+
+void draw_street_segment_major() {
+    setlinewidth(0.004 / visible_width);
+    IntersectionIndex intersection_id_from = 0;
+    IntersectionIndex intersection_id_to = 0;
+    setcolor(road);
+    
+    for (unsigned i = 0; i < street_segment_major_size; i++) {
+        
+//        if(street_segments[street_segments_major[i].id].highlight)
+//            setcolor(RED);
+//        else
+//            setcolor(road);
+
+        intersection_id_from = street_segments_major[i].StreetSegmentInfo_.from;
+        intersection_id_to = street_segments_major[i].StreetSegmentInfo_.to;
+
+        if (street_segments_major[i].StreetSegmentInfo_.curvePointCount == 0) {
+
+            double x_from = intersections_cartesian[intersection_id_from].x;
+            double y_from = intersections_cartesian[intersection_id_from].y;
+            double x_to = intersections_cartesian[intersection_id_to].x;
+            double y_to = intersections_cartesian[intersection_id_to].y;
+
+            drawline(x_from, y_from, x_to, y_to);
+
+        }//If the street is curved
+        else {
+            // Street "from" point
+
+            double startx1 = intersections_cartesian[intersection_id_from].x;
+            double starty1 = intersections_cartesian[intersection_id_from].y;
+
+            // First curve point
+            double startx2 = longitude_to_cartesian(getStreetSegmentCurvePoint(street_segments_major[i].id, 0).lon(), average_latitude);
+            double starty2 = latitude_to_cartesian(getStreetSegmentCurvePoint(street_segments_major[i].id, 0).lat());
+
+            drawline(startx1, starty1, startx2, starty2);
+
+            // First curve point is now the new starting points
+            startx1 = startx2;
+            starty1 = starty2;
+
+            for (unsigned k = 1; k < street_segments_major[i].StreetSegmentInfo_.curvePointCount; k++) {
+                startx2 = longitude_to_cartesian(getStreetSegmentCurvePoint(street_segments_major[i].id, k).lon(), average_latitude);
+                starty2 = latitude_to_cartesian(getStreetSegmentCurvePoint(street_segments_major[i].id, k).lat());
+                drawline(startx1, starty1, startx2, starty2);
+
+                startx1 = startx2;
+                starty1 = starty2;
+
+            }
+            //Draw from the last curve point to streetsegment.to
+            startx2 = intersections_cartesian[intersection_id_to].x;
+            starty2 = intersections_cartesian[intersection_id_to].y;
+
+            drawline(startx1, starty1, startx2, starty2);
+
+        }
+    }
+}
+
+//Draws all the streets classified as minor streets
+
+void draw_street_segment_minor() {
+    setlinewidth(0.0025 / visible_width);
+    setcolor(road);
+    
+    for (unsigned i = 0; i < street_segment_minor_size; i++) {
+        
+//        if(street_segments[street_segments_minor[i].id].highlight)
+//            setcolor(RED);
+//        else
+//            setcolor(road);
+
+        IntersectionIndex intersection_id_from = street_segments_minor[i].StreetSegmentInfo_.from;
+        IntersectionIndex intersection_id_to = street_segments_minor[i].StreetSegmentInfo_.to;
+
+        if (street_segments_minor[i].StreetSegmentInfo_.curvePointCount == 0) {
+
+            double x_from = intersections_cartesian[intersection_id_from].x;
+            double y_from = intersections_cartesian[intersection_id_from].y;
+            double x_to = intersections_cartesian[intersection_id_to].x;
+            double y_to = intersections_cartesian[intersection_id_to].y;
+
+            drawline(x_from, y_from, x_to, y_to);
+
+        }//If the street is curved
+        else {
+            // Street "from" point
+
+            double startx1 = intersections_cartesian[intersection_id_from].x;
+            double starty1 = intersections_cartesian[intersection_id_from].y;
+
+            // First curve point
+            double startx2 = longitude_to_cartesian(getStreetSegmentCurvePoint(street_segments_minor[i].id, 0).lon(), average_latitude);
+            double starty2 = latitude_to_cartesian(getStreetSegmentCurvePoint(street_segments_minor[i].id, 0).lat());
+
+            drawline(startx1, starty1, startx2, starty2);
+
+            // First curve point is now the new starting points
+            startx1 = startx2;
+            starty1 = starty2;
+
+            for (unsigned k = 1; k < street_segments_minor[i].StreetSegmentInfo_.curvePointCount; k++) {
+                startx2 = longitude_to_cartesian(getStreetSegmentCurvePoint(street_segments_minor[i].id, k).lon(), average_latitude);
+                starty2 = latitude_to_cartesian(getStreetSegmentCurvePoint(street_segments_minor[i].id, k).lat());
+                drawline(startx1, starty1, startx2, starty2);
+
+                startx1 = startx2;
+                starty1 = starty2;
+
+            }
+            //Draw from the last curve point to streetsegment.to
+            startx2 = intersections_cartesian[intersection_id_to].x;
+            starty2 = intersections_cartesian[intersection_id_to].y;
+
+            drawline(startx1, starty1, startx2, starty2);
+
+        }
+    }
+}
+
+//do we use this?? FIXME
+
+void draw_intersection() {
+    unsigned intersection_num = intersections.size();
+    setcolor(intersection);
+    for (unsigned i = 0; i < intersection_num; i++) {
+        double x = intersections_cartesian[i].x;
+        double y = intersections_cartesian[i].y;
+
+        if (intersections[i].highlighted) setcolor_by_name("red");
+        else setcolor(intersection);
+        fillarc(x, y, 0.000001, 0, 360);
+    }
+}
+
+//using vectors wasn;t working so I used a array and it worked, looks like it only accepts arrays.
+//max size for closed objects found is 3.7e-5 for toronto and min is  -8e-7
+//Draws the second layer of features
+
+void draw_features_layer2() {
+    t_point * temp_points;
+    double x1, y1, x2, y2;
+
+    for (unsigned i = 0; i < feature_layer2_size; i++) {
+
+        if (features_layer2[i].feature_type == Park) setcolor(park);
+        else if (features_layer2[i].feature_type == Beach) setcolor(sand);
+        else if (features_layer2[i].feature_type == Lake) setcolor(water);
+        else if (features_layer2[i].feature_type == River) setcolor(water);
+        else if (features_layer2[i].feature_type == Island) setcolor(land);
+        else if (features_layer2[i].feature_type == Shoreline) setcolor(sand);
+        else if (features_layer2[i].feature_type == Building) setcolor(building);
+        else if (features_layer2[i].feature_type == Greenspace) setcolor(grass);
+        else if (features_layer2[i].feature_type == Golfcourse) setcolor(grass);
+        else if (features_layer2[i].feature_type == Stream) setcolor(water);
+        else setcolor_by_name("black");
+
+        temp_points = new t_point [features_layer2[i].feature_pointCount];
+
+        if (features_layer2[i].feature_type_importance == SmallClosed) {
+            for (unsigned k = 0; k < features_layer2[i].feature_pointCount; k++) {
+                temp_points[k].x = features_layer2[i].feature_featurePoint[k].x;
+                temp_points[k].y = features_layer2[i].feature_featurePoint[k].y;
+            }
+            if (in_window(get_visible_world(), temp_points->x, temp_points->y)) fillpoly(temp_points, features_layer2[i].feature_pointCount);
+        } else {
+
+            for (unsigned k = 0; k < features_layer2[i].feature_pointCount - 1; k++) {
+                x1 = features_layer2[i].feature_featurePoint[k].x;
+                y1 = features_layer2[i].feature_featurePoint[k].y;
+                x2 = features_layer2[i].feature_featurePoint[k + 1].x;
+                y2 = features_layer2[i].feature_featurePoint[k + 1].y;
+                drawline(x1, y1, x2, y2);
+            }
+        }
+        setcolor_by_name("black");
+        delete [] temp_points;
+    }
+}
+
+//Draws the first layer of features
+
+void draw_features_layer1() {
+    t_point * temp_points;
+    double x1, y1, x2, y2;
+
+    for (unsigned i = 0; i < feature_layer1_size; i++) {
+
+        if (features_layer1[i].feature_type == Park) setcolor(park);
+        else if (features_layer1[i].feature_type == Beach) setcolor(sand);
+        else if (features_layer1[i].feature_type == Lake) setcolor(water);
+        else if (features_layer1[i].feature_type == River) setcolor(water);
+        else if (features_layer1[i].feature_type == Island) setcolor(land);
+        else if (features_layer1[i].feature_type == Shoreline) setcolor(sand);
+        else if (features_layer1[i].feature_type == Building) setcolor(building);
+        else if (features_layer1[i].feature_type == Greenspace) setcolor(grass);
+        else if (features_layer1[i].feature_type == Golfcourse) setcolor(grass);
+        else if (features_layer1[i].feature_type == Stream) setcolor(water);
+        else setcolor_by_name("black");
+
+        temp_points = new t_point [features_layer1[i].feature_pointCount];
+
+        if (features_layer1[i].feature_type_importance == LargeClosed) {
+            for (unsigned k = 0; k < features_layer1[i].feature_pointCount; k++) {
+                temp_points[k].x = features_layer1[i].feature_featurePoint[k].x;
+                temp_points[k].y = features_layer1[i].feature_featurePoint[k].y;
+            }
+            if (in_window(get_visible_world(), temp_points->x, temp_points->y)) fillpoly(temp_points, features_layer1[i].feature_pointCount);
+        } else {
+
+            for (unsigned k = 0; k < features_layer1[i].feature_pointCount - 1; k++) {
+                x1 = features_layer1[i].feature_featurePoint[k].x;
+                y1 = features_layer1[i].feature_featurePoint[k].y;
+                x2 = features_layer1[i].feature_featurePoint[k + 1].x;
+                y2 = features_layer1[i].feature_featurePoint[k + 1].y;
+                drawline(x1, y1, x2, y2);
+            }
+        }
+        setcolor_by_name("black");
+        delete [] temp_points;
+    }
+
+
+}
+
+//Draws all the points of interest at varying zoom levels
+
+void draw_points_of_interest() {
+    setfontsize(9);
+    setcolor(BLACK);
+    settextrotation(0);
+    t_point coords;
+
+    //airports and tourism spots most visible
+    if (tourism) {
+        for (unsigned j = 0; j < map_data->tourism_pois.size(); j++) {
+            coords.x = longitude_to_cartesian(getNodeByIndex(map_data->tourism_pois[j])->coords().lon(), average_latitude);
+            coords.y = latitude_to_cartesian(getNodeByIndex(map_data->tourism_pois[j])->coords().lat());
+            if (in_window(get_visible_world(), coords.x, coords.y) && (get_visible_world().get_width() < .004)) {
+                draw_surface(load_png_from_file("libstreetmap/resources/tourism.png"), coords.x, coords.y);
+                drawtext(coords.x, coords.y + .01 * visible_width, name_from_node_index[map_data->tourism_pois[j]], FLT_MAX, .000006);
+            }
+        }
+    }
+    if (transportation) {
+        for (unsigned n = 0; n < map_data->airport_pois.size(); n++) {
+            coords.x = longitude_to_cartesian(getNodeByIndex(map_data->airport_pois[n])->coords().lon(), average_latitude);
+            coords.y = latitude_to_cartesian(getNodeByIndex(map_data->airport_pois[n])->coords().lat());
+
+            if (in_window(get_visible_world(), coords.x, coords.y) && (get_visible_world().get_width() < .004)) {
+                draw_surface(load_png_from_file("libstreetmap/resources/airport.png"), coords.x, coords.y);
+                drawtext(coords.x, coords.y + .01 * visible_width, name_from_node_index[map_data->airport_pois[n]], FLT_MAX, .000045);
+            }
+        }
+        //subways next most available
+        for (unsigned j = 0; j < map_data->subway_pois.size(); j++) {
+            coords.x = longitude_to_cartesian(getNodeByIndex(map_data->subway_pois[j])->coords().lon(), average_latitude);
+            coords.y = latitude_to_cartesian(getNodeByIndex(map_data->subway_pois[j])->coords().lat());
+
+            if (in_window(get_visible_world(), coords.x, coords.y) && (get_visible_world().get_width() < .004)) {
+                draw_surface(load_png_from_file("libstreetmap/resources/subway.png"), coords.x, coords.y);
+                drawtext(coords.x, coords.y, name_from_node_index[map_data->subway_pois[j]], FLT_MAX, .000003);
+            }
+        }
+    }
+    if (emergency) { //hospitals and schools next most visible
+        for (unsigned j = 0; j < map_data->hospitals_pois.size(); j++) {
+            coords.x = longitude_to_cartesian(getPointOfInterestPosition(map_data->hospitals_pois[j]).lon(), average_latitude);
+            coords.y = latitude_to_cartesian(getPointOfInterestPosition(map_data->hospitals_pois[j]).lat());
+
+            if (in_window(get_visible_world(), coords.x, coords.y) && (get_visible_world().get_width() < .004)) {
+                draw_surface(load_png_from_file("libstreetmap/resources/hospital.png"), coords.x, coords.y);
+                drawtext(coords.x, coords.y + .005 * visible_width, getPointOfInterestName(map_data->hospitals_pois[j]), FLT_MAX, .000002);
+            }
+        }
+        for (unsigned q = 0; q < map_data->emergency_pois.size(); q++) {
+            coords.x = longitude_to_cartesian(getPointOfInterestPosition(map_data->emergency_pois[q]).lon(), average_latitude);
+            coords.y = latitude_to_cartesian(getPointOfInterestPosition(map_data->emergency_pois[q]).lat());
+
+            if (in_window(get_visible_world(), coords.x, coords.y) && (get_visible_world().get_width() < .004)) {
+                draw_surface(load_png_from_file("libstreetmap/resources/emergency.png"), coords.x, coords.y);
+                drawtext(coords.x, coords.y + .005 * visible_width, getPointOfInterestName(map_data->emergency_pois[q]), FLT_MAX, .0000025);
+            }
+        }
+    }
+    if (school) {
+        for (unsigned n = 0; n < map_data->top_schools_pois.size(); n++) {
+            coords.x = longitude_to_cartesian(getPointOfInterestPosition(map_data->top_schools_pois[n]).lon(), average_latitude);
+            coords.y = latitude_to_cartesian(getPointOfInterestPosition(map_data->top_schools_pois[n]).lat());
+
+            if (in_window(get_visible_world(), coords.x, coords.y) && (get_visible_world().get_width() < .004)) {
+                draw_surface(load_png_from_file("libstreetmap/resources/school.png"), coords.x, coords.y);
+                drawtext(coords.x, coords.y + .005 * visible_width, getPointOfInterestName(map_data->top_schools_pois[n]), FLT_MAX, .000002);
+            }
+        }
+        for (unsigned n = 0; n < map_data->school_pois.size(); n++) {
+            coords.x = longitude_to_cartesian(getPointOfInterestPosition(map_data->school_pois[n]).lon(), average_latitude);
+            coords.y = latitude_to_cartesian(getPointOfInterestPosition(map_data->school_pois[n]).lat());
+
+            if (in_window(get_visible_world(), coords.x, coords.y) && (get_visible_world().get_width() < .003)) {
+                draw_surface(load_png_from_file("libstreetmap/resources/school.png"), coords.x, coords.y);
+                drawtext(coords.x, coords.y + .005 * visible_width, getPointOfInterestName(map_data->school_pois[n]), FLT_MAX, .000001);
+            }
+        }
+    }
+    if (food) {
+        //unpopulated until button is pressed
+        for (unsigned i = 0; i < map_data->cafe_pois.size(); i++) {
+            coords.x = longitude_to_cartesian(getPointOfInterestPosition(map_data->cafe_pois[i]).lon(), average_latitude);
+            coords.y = latitude_to_cartesian(getPointOfInterestPosition(map_data->cafe_pois[i]).lat());
+
+            if (in_window(get_visible_world(), coords.x, coords.y) && (get_visible_world().get_width() < .003)) {
+                draw_surface(load_png_from_file("libstreetmap/resources/food.png"), coords.x, coords.y);
+                drawtext(coords.x, coords.y + .005 * visible_width, getPointOfInterestName(map_data->cafe_pois[i]), FLT_MAX, .0000008);
+            }
+        }
+        for (unsigned i = 0; i < (map_data->restaurant_pois).size(); i++) {
+            coords.x = longitude_to_cartesian(getPointOfInterestPosition(map_data->restaurant_pois[i]).lon(), average_latitude);
+            coords.y = latitude_to_cartesian(getPointOfInterestPosition(map_data->restaurant_pois[i]).lat());
+
+            if (in_window(get_visible_world(), coords.x, coords.y) && (get_visible_world().get_width() < .0015)) {
+                draw_surface(load_png_from_file("libstreetmap/resources/food.png"), coords.x, coords.y);
+                drawtext(coords.x, coords.y + .005 * visible_width, getPointOfInterestName(map_data->restaurant_pois[i]), FLT_MAX, .0000007);
+            }
+        }
+        for (unsigned i = 0; i < (map_data->food_pois).size(); i++) {
+            coords.x = longitude_to_cartesian(getPointOfInterestPosition(map_data->food_pois[i]).lon(), average_latitude);
+            coords.y = latitude_to_cartesian(getPointOfInterestPosition(map_data->food_pois[i]).lat());
+
+            if (in_window(get_visible_world(), coords.x, coords.y) && (get_visible_world().get_width() < .001)) {
+                draw_surface(load_png_from_file("libstreetmap/resources/food.png"), coords.x, coords.y);
+                drawtext(coords.x, coords.y + .005 * visible_width, getPointOfInterestName(map_data->food_pois[i]), FLT_MAX, .0000005);
+            }
+        }
+        for (unsigned i = 0; i < (map_data->fast_food_pois).size(); i++) {
+            coords.x = longitude_to_cartesian(getPointOfInterestPosition(map_data->fast_food_pois[i]).lon(), average_latitude);
+            coords.y = latitude_to_cartesian(getPointOfInterestPosition(map_data->fast_food_pois[i]).lat());
+
+            if (in_window(get_visible_world(), coords.x, coords.y) && (get_visible_world().get_width() < .0008)) {
+                draw_surface(load_png_from_file("libstreetmap/resources/food.png"), coords.x, coords.y);
+                drawtext(coords.x, coords.y + .005 * visible_width, getPointOfInterestName(map_data->fast_food_pois[i]), FLT_MAX, .0000006);
+            }
+        }
+        for (unsigned p = 0; p < map_data->drinking_pois.size(); p++) {
+            coords.x = longitude_to_cartesian(getPointOfInterestPosition(map_data->drinking_pois[p]).lon(), average_latitude);
+            coords.y = latitude_to_cartesian(getPointOfInterestPosition(map_data->drinking_pois[p]).lat());
+
+            if (in_window(get_visible_world(), coords.x, coords.y) && (get_visible_world().get_width() < .002)) {
+                draw_surface(load_png_from_file("libstreetmap/resources/drinks.png"), coords.x, coords.y);
+                drawtext(coords.x, coords.y + .005 * visible_width, getPointOfInterestName(map_data->drinking_pois[p]), FLT_MAX, .00000075);
+            }
+        }
+    }
+    if (health) {
+        for (unsigned j = 0; j < map_data->health_pois.size(); j++) {
+            coords.x = longitude_to_cartesian(getPointOfInterestPosition(map_data->health_pois[j]).lon(), average_latitude);
+            coords.y = latitude_to_cartesian(getPointOfInterestPosition(map_data->health_pois[j]).lat());
+
+            if (in_window(get_visible_world(), coords.x, coords.y) && (get_visible_world().get_width() < .003)) {
+                draw_surface(load_png_from_file("libstreetmap/resources/health.png"), coords.x, coords.y);
+                drawtext(coords.x, coords.y + .005 * visible_width, getPointOfInterestName(map_data->health_pois[j]), FLT_MAX, 0.000001);
+            }
+        }
+    }
+    if (bank) {
+        for (unsigned k = 0; k < map_data->bank_pois.size(); k++) {
+            coords.x = longitude_to_cartesian(getPointOfInterestPosition(map_data->bank_pois[k]).lon(), average_latitude);
+            coords.y = latitude_to_cartesian(getPointOfInterestPosition(map_data->bank_pois[k]).lat());
+
+            if (in_window(get_visible_world(), coords.x, coords.y) && (get_visible_world().get_width() < .003)) {
+                draw_surface(load_png_from_file("libstreetmap/resources/bank.png"), coords.x, coords.y);
+                drawtext(coords.x, coords.y + .005 * visible_width, getPointOfInterestName(map_data->bank_pois[k]), FLT_MAX, .000001);
+            }
+        }
+    }
+    if (fuel) {
+        for (unsigned l = 0; l < map_data->fuel_pois.size(); l++) {
+            coords.x = longitude_to_cartesian(getPointOfInterestPosition(map_data->fuel_pois[l]).lon(), average_latitude);
+            coords.y = latitude_to_cartesian(getPointOfInterestPosition(map_data->fuel_pois[l]).lat());
+
+            if (in_window(get_visible_world(), coords.x, coords.y) && (get_visible_world().get_width() < .003)) {
+                draw_surface(load_png_from_file("libstreetmap/resources/fuel.png"), coords.x, coords.y);
+                drawtext(coords.x, coords.y + .005 * visible_width, getPointOfInterestName(map_data->fuel_pois[l]), FLT_MAX, .000003);
+            }
+        }
+    }
+    if (church) {
+        for (unsigned m = 0; m < map_data->church_pois.size(); m++) {
+            coords.x = longitude_to_cartesian(getPointOfInterestPosition(map_data->church_pois[m]).lon(), average_latitude);
+            coords.y = latitude_to_cartesian(getPointOfInterestPosition(map_data->church_pois[m]).lat());
+
+            if (in_window(get_visible_world(), coords.x, coords.y) && (get_visible_world().get_width() < .003)) {
+                draw_surface(load_png_from_file("libstreetmap/resources/church.png"), coords.x, coords.y);
+                drawtext(coords.x, coords.y + .005 * visible_width, getPointOfInterestName(map_data->church_pois[m]), FLT_MAX, .0000015);
+            }
+        }
+    }
+    if (cinema) {
+        for (unsigned q = 0; q < map_data->cinema_pois.size(); q++) {
+            coords.x = longitude_to_cartesian(getPointOfInterestPosition(map_data->cinema_pois[q]).lon(), average_latitude);
+            coords.y = latitude_to_cartesian(getPointOfInterestPosition(map_data->cinema_pois[q]).lat());
+
+            if (in_window(get_visible_world(), coords.x, coords.y) && (get_visible_world().get_width() < .003)) {
+                draw_surface(load_png_from_file("libstreetmap/resources/cinema.png"), coords.x, coords.y);
+                drawtext(coords.x, coords.y + .005 * visible_width, getPointOfInterestName(map_data->cinema_pois[q]), FLT_MAX, .0000025);
+            }
+        }
+    }
+    if (more) {
+        for (unsigned r = 0; r < map_data->other_pois.size(); r++) {
+            coords.x = longitude_to_cartesian(getPointOfInterestPosition(map_data->other_pois[r]).lon(), average_latitude);
+            coords.y = latitude_to_cartesian(getPointOfInterestPosition(map_data->other_pois[r]).lat());
+
+            if (in_window(get_visible_world(), coords.x, coords.y) && (get_visible_world().get_width() < .002)) {
+                draw_surface(load_png_from_file("libstreetmap/resources/other.png"), coords.x, coords.y);
+                drawtext(coords.x, coords.y + .005 * visible_width, getPointOfInterestName(map_data->other_pois[r]), FLT_MAX, .00000075);
+            }
+        }
+    }
+}
+
+
+
+/*************************************************************************************************************************************************************************/
+
+/*MATH FUNCTIONS*/
+
+bool compare_area(const feature_data& a, const feature_data& b) {
+    return a.area > b.area;
+}
+
+t_point POI_offset(t_point xy) {
+    //t_point screenxy = world_to_scrn(xy);
+    xy.x = xy.x - (.005 * visible_width);
+    xy.y = xy.y + (.01 * visible_width);
+    //xy = scrn_to_world(screenxy);
+    return (xy);
+}
+
+
+
+
+//Conversion functions, from LatLon to Cartesian
+
+double longitude_to_cartesian(double longitude, double latavg) {
+    double x;
+    x = longitude * DEG_TO_RAD * std::cos(latavg * DEG_TO_RAD);
+
+    return x;
+
+}
+
+double latitude_to_cartesian(double latitude) {
+    double y;
+    y = latitude * DEG_TO_RAD;
+
+    return y;
+}
+
+//Conversion from Cartesian to LatLon
+
+double cartesian_to_longitude(double x, double latavg) {
+    double longitude;
+    longitude = x / DEG_TO_RAD / std::cos(latavg * DEG_TO_RAD);
+
+    return longitude;
+}
+
+double cartesian_to_latitude(double y) {
+    double latitude;
+    latitude = y / DEG_TO_RAD;
+
+    return latitude;
+}
+
+//Function to calculate area of a polygon
+//Used in choosing which features to draw first (chosen by area)
+
+double polygon_area(std::vector<t_point> position, int size) {
+    t_point *temp;
+    temp = new t_point[size];
+
+    for (int q = 0; q < size; q++) {
+        temp[q].x = position[q].x;
+        temp[q].y = position[q].y;
+    }
+
+    float area = 0;
+    int j = size - 1;
+    for (int i = 0; i < size; i++) {
+        area = area + (temp[j]. x + temp[i]. x) *(temp [j].y - temp[i].y);
+        j = i;
+    }
+    delete[]temp;
+
+    return std::abs(area / 2);
+}
+
+//Used for classifying size of open features in order to decide the order of drawing
+
+double line_length(std::vector<t_point> position, int size) {
+    t_point *temp;
+    temp = new t_point[size];
+
+    for (int q = 0; q < size; q++) {
+        temp[q].x = position[q].x;
+        temp[q].y = position[q].y;
+    }
+    int j = size - 1;
+    float length = 0;
+    for (int i = 0; i < size; i++) {
+        length = length + std::sqrt(std::pow(temp[j]. x - temp[i]. x, 2) + std::pow(temp[j]. y - temp[i].y, 2));
+        j = i;
+    }
+    delete[]temp;
+
+    return (length);
+}
+
+//checks if point is in visible world
+
+bool in_window(t_bound_box range, float _x, float _y) {
+    if ((_y >= range.bottom()) && (_y <= range.top()) && (_x <= range.right() && (_x >= range.left()))) {
+        return true;
+    } else {
+
+        return false;
+    }
+}
+
+
+/*************************************************************************************************************************************************************************/
+
+/*M3 CODE*/
+
+
+void draw_search_bar() {
+    set_coordinate_system(GL_SCREEN);
+    int width = 1000;
+    if (key_input.size() > 100) {
+        width = 1000 + (key_input.size() - 100)*18;
+    }
+    text_box = t_bound_box(10 + search_bar_offset, 10, width + search_bar_offset, 60);
+    clear_box = t_bound_box(width + search_bar_offset, 10, width + search_bar_offset + 60, 60);
+    t_bound_box text_box_inner = t_bound_box(12 + search_bar_offset, 12, width + search_bar_offset - 2, 58);
+
+    setcolor(text_box_colour);
+    fillrect(text_box);
+    setcolor(land_day);
+    fillrect(text_box_inner);
+    setcolor(PINK);
+    fillrect(clear_box);
+    t_point coords = POI_offset(clear_box.get_center());
+    draw_surface(load_png_from_file("libstreetmap/resources/clear_icon.png"), coords.x - 15, coords.y - 15);
+    setcolor(62, 62, 62, 255);
+    std::string pr(key_input.begin(), key_input.end());
+    //drawtext_in(clear_box, "X" , FLT_MAX);
+    setfontsize(20);
+    if (key_input.empty()) {
+        if (first_parse) drawtext_in(text_box, "Enter 'search poi' or 'search intersections' ", FLT_MAX);
+        else if (searching_poi) drawtext_in(text_box, "Enter POI", FLT_MAX);
+        else if (searching_intersections) {
+            if (first_street_input) drawtext_in(text_box, "Enter Street 1", FLT_MAX);
+            else drawtext_in(text_box, "Enter Street 2", FLT_MAX);
+        }
+    }
+    //if(typing && key_input.empty()) drawtext_in(text_box, "" , FLT_MAX);
+    if (!key_input.empty()) {
+
+        drawtext_in(text_box, pr, FLT_MAX);
+
+    }
+    set_coordinate_system(GL_WORLD);
+}
+
+void draw_suggestions() {
+    set_coordinate_system(GL_SCREEN);
+    int width = 1000;
+
+    std::vector <t_bound_box> text_boxes;
+
+    suggestions_drawn2.clear();
+
+    suggestions_background_box = t_bound_box(10 + search_bar_offset, 60, width + search_bar_offset, 111 + (50 * (suggestions_drawn2.size() - 1)));
+    setcolor(text_box_colour);
+    //fillrect(suggestions_background_box);
+
+
+
+    //if there are only 5 suggestions or less
+    if (suggestions_drawn.size() < 5) {
+        for (int i = 0; i < suggestions_drawn.size(); i++) {
+            suggestions_drawn2.push_back(suggestions_drawn[i]);
+        }
+        //otherwise draw only keep first 5
+    } else {
+        for (int i = 0; i < 5; i++) {
+            suggestions_drawn2.push_back(suggestions_drawn[i + move_suggestion_down]);
+        }
+    }
+    //draw the first 5 suggestions
+    for (int i = 0; i < suggestions_drawn2.size(); i++) {
+        text_boxes.push_back(t_bound_box(12 + search_bar_offset, 60 + (50 * i), width + search_bar_offset - 2, 109 + (50 * i)));
+
+        setcolor(land_day);
+        // fillrect(base);
+        // setcolor(suggestion_box_colour);
+        if ((i == selected_suggestion - move_suggestion_down - 1 || ((i == 5) && selected_suggestion > 5))) setcolor(PINK);
+
+        fillrect(text_boxes[i]);
+        setcolor(BLACK);
+
+        setfontsize(20);
+        drawtext_in(text_boxes[i], suggestions_drawn2[i], FLT_MAX);
+
+    }
+    set_coordinate_system(GL_WORLD);
+}
+unsigned selected_direction;
+
+void draw_directions(){
+    set_coordinate_system(GL_SCREEN);    
+    Directions123 = get_string_vec();
+    std::vector <t_bound_box> text_boxes;
+    if (Directions123.size() > 2){
+    for (int i = 0; i < Directions123.size(); i++) {
+        text_boxes.push_back(t_bound_box(12, 885 + (50 * i), 1000, 900 +(15*1)));
+
+        setcolor(PINK);
+        // fillrect(base);
+        // setcolor(suggestion_box_colour);
+        fillrect(text_boxes[i]);
+        setcolor(BLACK);
+
+        setfontsize(20);
+        drawtext_in(text_boxes[i], Directions123[selected_direction], FLT_MAX);
+
+    }
+    }
+//     fillrect(text_boxes);
+//     setcolor(BLACK);
+//        setfontsize(20);
+//        drawtext(const t_point& text_center, Directions123[0], FLT_MAX)
+        
+        set_coordinate_system(GL_WORLD);
+}
+
+void draw_sidebar() {
+    set_coordinate_system(GL_SCREEN);
+    search_bar_offset = 170;
+    t_bound_box sidebar_base = t_bound_box(10, 10, search_bar_offset + 12, 200);
+    
+    destination_button = t_bound_box(12, 112, search_bar_offset + 10, 140);
+    quit_box = t_bound_box(12, 142, search_bar_offset + 10, 170);
+    t_bound_box search_info_box = t_bound_box(12, 12, search_bar_offset + 10, 110);
+    //t_bound_box nav_directions_box = t_bound_box(12, 171, search_bar_offset +10, 799);
+
+    if (destination_parse) {
+        //output directions
+        setcolor(text_box_colour);
+        fillrect(sidebar_base);
+        setcolor(land_day);
+        fillrect(search_info_box);
+       // fillrect(nav_directions_box);
+        setcolor(PINK);
+        fillrect(quit_box);
+        setcolor(BLACK);
+        std::vector <t_bound_box> text_boxes;
+        for (int i = 0; i < 5; i++) {
+            
+            text_boxes.push_back(t_bound_box(15, 20 + (15*i), search_bar_offset + 10, 27 + (15*i)));
+            setcolor(BLACK);
+            setfontsize(12);
+            drawtext_in(text_boxes[i], info_output[i], FLT_MAX);
+
+        }
+        text_boxes.clear();
+
+        drawtext_in(quit_box, "Quit");
+        
+    } else {
+        setcolor(text_box_colour);
+        fillrect(sidebar_base);
+        setcolor(land_day);
+        fillrect(search_info_box);
+        setcolor(PINK);
+        fillrect(destination_button);
+        fillrect(quit_box);
+        setcolor(BLACK);
+        setfontsize(12);
+        drawtext_in(quit_box, "Quit");
+        drawtext_in(destination_button, "Add Destination");
+
+        std::vector <t_bound_box> text_boxes;
+        for (int i = 0; i < info_output.size(); i++) {
+            
+            text_boxes.push_back(t_bound_box(15, 20 + (15*i), search_bar_offset + 10, 27 + (15*i)));
+            setcolor(BLACK);
+            setfontsize(12);
+            drawtext_in(text_boxes[i], info_output[i], FLT_MAX);
+
+        }
+    }
+}
+
+//kind of not math but whatever
+unsigned id1 =0;
+unsigned id2 =0;
+bool one_selected = false;
+
+void act_on_button_press(float x, float y, t_event_buttonPressed event) {
+    
+    auto const lon = cartesian_to_longitude(x, average_latitude);
+    auto const lat = cartesian_to_latitude(y);
+
+    t_point screen = t_point(x, y);
+    screen = world_to_scrn(screen);
+    //t_bound_box text_box = t_bound_box(10, 10, 1000, 60);
+
+    if (text_box.intersects(screen)) {
+        //
+        set_keypress_input(true);
+        typing = true;
+
+    } else if (clear_box.intersects(screen)) {
+        sidebar = false;
+        first_parse = true;
+        key_input.clear();
+        search_bar_offset = 0;
+        searching_intersections = false;
+        searching_poi = false;
+
+    } else if (destination_button.intersects(screen) && sidebar) {
+        destination_parse = true;
+        sidebar = false;
+        first_parse = true;
+        search_bar_offset = 0;
+        from_location = key_input;
+        key_input.clear();
+        searching_intersections = false;
+        searching_poi = false;
+      
+        //save first destination for mapping
+
+    } else if (quit_box.intersects(screen)) {
+        destination_parse = false;
+        sidebar = false;
+        first_parse = true;
+        search_bar_offset = 0;
+        from_location.clear();
+        key_input.clear();
+        suggestions_drawn.clear();
+        typing = false;
+        searching_intersections = false;
+        searching_poi = false;
+
+    }//        else if (sug.intersects(screen)) {
+        //        //find which box
+        //        //set keyinput to selected suggestion
+        //        //call appropriate function
+        //        for (unsigned i = 0; i < suggestions_drawn2.size(); i++) {
+        //            t_bound_box temp = t_bound_box(12 + search_bar_offset, 60 + (50 * i), 1000 + search_bar_offset - 2, 109 + (50 * i));
+        //            if(temp.intersects(screen)){
+        //                key_input = suggestions_drawn2[i];
+        //            } 
+        //        //text_boxes.push_back(t_bound_box(12 + search_bar_offset, 60 + (50 * i), width + search_bar_offset - 2, 109 + (50 * i)));
+        //
+        //
+        //            key_input = selected_suggestion;
+        //        }
+        //        
+        //    } 
+    else {
+
+        set_keypress_input(false);
+        typing = false;
+
+//                LatLon position(lat, lon);
+//                auto const id = find_closest_intersection(position);
+//                
+//                if (external_click == true) {
+//                    std::string temp_msg = "Closest Intersection: " + intersections[id].name;
+//                    message = temp_msg;
+//                }
+//                for (unsigned i = 0; i < currently_highlighted.size(); i++) 
+
+        LatLon position(lat, lon);
+        //auto const id = find_closest_intersection(position);
+        //path_finding(8776, 8777);
+        for (unsigned i = 0; i < currently_highlighted.size(); i++) {
+
+                  intersections[currently_highlighted[i]].highlighted = false;
+         }
+        currently_highlighted.clear();
+        
+        if(one_selected){
+            id2 = find_closest_intersection(position);
+            one_selected = false;
+            currently_highlighted.push_back(id2);
+            std::cout << "start dijkstra" << std::endl;
+            path_finding(id1, id2);
+            std::cout << "end dijkstra" << std::endl;
+            directions();
+        }
+        else{
+            id1 = find_closest_intersection(position);
+            currently_highlighted.push_back(id1); 
+            clear_shortest_path_street();
+            one_selected = true;
+        }
+        find_path_to_point_of_interest(34155, "Subway", 15.00000000000000000);
+//        if (external_click == true) {
+//                    std::string temp_msg = "Closest Intersection: " + intersections[id].name;
+//                            message = temp_msg;
+//                }
+//                for (unsigned i = 0; i < currently_highlighted.size(); i++) {
+//        
+//                    intersections[currently_highlighted[i]].highlighted = false;
+//                }
+//            
+//                currently_highlighted.clear();
+//                currently_highlighted.resize(1);
+//                currently_highlighted[0] = id;
+//                intersections[currently_highlighted[0]].highlighted = true;
+        }
+    suggestions_drawn.clear();
+    Directions123.clear();
+    draw_screen();
+}
+
+
+void key_press(char h, int keysym) {
+    //use search commands for first parse tier
+    if (first_parse) dictionary = search_commands;
+    else if (searching_poi) dictionary = POI_names;
+    else if (searching_intersections) dictionary = street_names;
+    //BACKSPACE
+    if ((!key_input.empty()) && (h == 8)) {
+        //case if user enters a back space.
+        key_input.pop_back();
+        selected_suggestion = 1;
+        selected_direction = 1;
+        // move_suggestion_down = 0; 
+
+        //ENTER
+    } else if ((!key_input.empty()) && (h == 13)) {
+
+        //Cchoose selected suggestion
+        key_input = suggestions_drawn2[selected_suggestion - move_suggestion_down - 1];
+        suggestions_drawn.clear();
+
+        //first parse tier
+        if (first_parse) {
+
+            if (key_input == "search poi") {
+
+                key_input.clear();
+                searching_poi = true;
+                //dictionary = POI_names;
+                first_parse = false;
+
+            } else if (key_input == "search intersections") {
+
+                key_input.clear();
+                //dictionary = street_names;
+                searching_intersections = true;
+                first_parse = false;
+
+            }
+
+            //second parse tier
+
+        } else {
+            selected_suggestion = 1;
+            selected_direction = 1;
+            move_suggestion_down = 0;
+
+            if (searching_poi) {
+                //select the suggested poi
+                if (key_input == "no match") {
+                    key_input.clear();
+                    info_output.push_back("Try a selecting a suggested POI.\n jk");
+                            sidebar = true;
+                } else {
+                    if (!destination_parse) {
+                        search_poi();
+                        intersection_1 = find_closest_intersection(getPointOfInterestPosition(found_poi[0]));
+                    } else {
+                        //call mapping algorithm
+                        
+                        search_poi();
+                        //find closest poi
+                        intersection_2 = find_closest_intersection(getPointOfInterestPosition(found_poi[0]));
+                        path_finding_POI(intersection_1, key_input);
+                        directions();
+                   
+                        //find_path_between_intersections(intersection_1, intersection_2, const double turn_penalty);
+                    }
+                        //call mapping algorithm
+                        //find closest poi
+                        //find_path_between_intersections(intersection_1, intersection_2, const double turn_penalty);
+                }
+            }if (searching_intersections) {
+                //select suggested poi
+                if (key_input == "no match") {
+                    key_input.clear();
+                    info_output.push_back("Try a selecting a suggested street name.");
+                    sidebar = true;
+                } else {
+                    if (first_street_input) {
+                        street_1 = key_input;
+                        key_input.clear();
+                        first_street_input = false;
+
+                    } else {
+                        street_2 = key_input;
+                        first_street_input = true;
+                        key_input.clear();
+                        std::vector<unsigned> temp = find_intersection_ids_from_street_names(street_1, street_2);
+
+                        if (!destination_parse) {
+                            //get both
+
+                            intersection_1 = temp[0];
+                            sidebar = true;
+                            info_output.push_back(getIntersectionName(intersection_1));
+
+                        } else {
+                            intersection_2 = temp[0];
+                            //find_path_between_intersections(intersection_1, intersection_2, const double turn_penalty);
+                            //find closest to intersection_1
+                            path_finding(intersection_1, intersection_2 );
+                            directions();
+                            //FIXME: Call algorithm
+                           
+                        }
+                    }
+                }
+            }
+        }
+        //if the user presses enter and theres a suggestion selected;
+        //        if(selected_suggestion-1 > -1){
+        //            if(!corrected.empty()){
+        //                std::cout << corrected <<std::endl;
+        //            }else{
+        //                std::cout << suggestions_drawn[selected_suggestion-1] << std::endl; 
+        //            }
+        //        key_input.clear();
+        //        suggestions_drawn.clear(); //clear if user chooses a selection
+        //         corrected.clear();
+
+    }//idk what this means :(( 
+        //    else if (!compare_string2(key_input).empty()) {
+        //        std::cout << key_input;
+        //        key_input.clear();
+        //        suggestions_drawn.clear(); //clear if user enters a valid parameter
+        //        corrected.clear();
+        //
+        //   
+    else if ((keysym == 65505)) {
+        //        //for shift purposes
+    }//        //DOWN ARROW
+    else if (keysym == 65364) {
+
+        if (suggestions_drawn.size() > 0) {
+            if (selected_suggestion < suggestions_drawn.size() && suggestions_drawn[0] != "no match") selected_suggestion++; //go down until you hit the end
+            if ((selected_suggestion > 5) && 5 + move_suggestion_down < suggestions_drawn.size()) move_suggestion_down++; //change the thing
+        }
+
+        //UP ARROW
+    } else if (keysym == 65362) {
+
+        if (suggestions_drawn.size() > 0) {
+            if (selected_suggestion > 0)selected_suggestion--; // -2 is the unselect state
+            if ((selected_suggestion > 4)) move_suggestion_down--;
+        }
+    }else if (keysym == 65361) {
+
+        if (Directions123.size() > 0) {
+            if (selected_direction > 0)selected_direction--; // -2 is the unselect state
+        }
+        }else if (keysym == 65363) {
+
+        if (Directions123.size() > 0) {
+            if (selected_direction < Directions123.size()) selected_direction++; //go down until you hit the end
+            }
+        }else {
+
+        key_input.push_back(h);
+
+        //will give a new selection
+        //use the value from corrected
+        //need to choose selection
+        //call parser
+    }
+
+    autocomplete2();
+    autocorrect2();
+    draw_screen();
+}
+
+void search_poi() {
+    //draw png
+    //info_output = str(getPointOfInterestPosition(find_POIs_from_name(key_input)));
+    //print out info
+    int j;
+    std::string temp;
+    for (unsigned i = 0; i < getNumberOfPointsOfInterest(); i++) {
+        if (std::strcmp(POI_names_with_duplicates[i].c_str(), key_input.c_str()) == 0) {
+            found_poi.push_back(i);
+            info_output.push_back(getPointOfInterestName(i));
+           // info_output.push_back(": ");
+            info_output.push_back(getPointOfInterestType(i));
+        }
+    }
+    sidebar = true;
+    key_input.clear();
+}
+
+void highlight_poi() {
+    t_point coords;
+    coords.x = longitude_to_cartesian(getPointOfInterestPosition(found_poi[0]).lon(), average_latitude);
+    coords.y = latitude_to_cartesian(getPointOfInterestPosition(found_poi[0]).lat());
+    coords = POI_offset(coords);
+    draw_surface(load_png_from_file("libstreetmap/resources/intersection.png"), coords.x, coords.y);
+}
+
+std::vector<std::string> compare_string(std::string name) {
+    std::vector<std::string> found_names;
+    int length = key_input.size();
+    for (unsigned i = 0; i < dictionary.size(); i++) {
+        std::string temp = dictionary[i].substr(0, length);
+        if (std::strcmp(key_input.c_str(), temp.c_str()) == 0) {
+            found_names.push_back(dictionary[i]);
+        }
+    }
+
+    return (found_names);
+}
+
+std::vector<std::string> compare_string2(std::string name) {
+    std::vector<std::string> found_names;
+    for (int i = 0; i < dictionary.size(); i++) {
+        if (std::strcmp(name.c_str(), dictionary[i].c_str()) == 0) {
+            found_names.push_back(dictionary[i]);
+        }
+    }
+    return (found_names);
+}
+
+void autocomplete2() {
+    char c;
+    bool is_suggestion_different;
+    bool temp_name_diff = false;
+    std::string temp_vector;
+
+    std::vector<std::string> temp_found_names;
+
+    if (key_input.size() > 0) {
+        temp_found_names = compare_string(key_input);
+        if (temp_found_names.size() > 1) {
+            for (unsigned k = 0; k < temp_found_names.size() - 1; k++) {
+                if (temp_found_names[0] != temp_found_names[k]) {
+                    temp_name_diff = true;
+                }
+            }
+        }
+        suggestions_drawn = temp_found_names;
+        //            if (temp_found_names.size() == 1 || temp_name_diff == true) {
+        //                           std::cout << "\n" << "Do you mean " << temp_found_names[0];
+        //            }
+    } else {
+        suggestions_drawn.clear();
+    }
+
+    return;
+}
+
+void autocorrect2() {
+    std::string temp;
+    std::string found;
+    int difference = 0;
+    int difference2 = 0;
+    //    temp = temp.insert(1, "hhelloo", 1, 5);
+    //    std::cout << temp << "\n";
+
+    std::vector<std::string> temp_found_names;
+    temp_found_names = compare_string(key_input);
+
+    if (temp_found_names.size() == 0) {
+        for (unsigned i = 0; i < dictionary.size(); i++) {
+            difference = dictionary[i].size() - key_input.size(); //remember this has to be changed to appropriate
+            difference2 = std::abs(difference);
+            if (difference2 < 2) {
+                for (unsigned j = 0; j < dictionary[i].size() + 1; j++) {
+
+                    //Forgot a letter
+                    if (j < dictionary[i].size()) {
+                        temp = key_input;
+                        temp = temp.insert(j, dictionary[i], j, 1);
+                        if (std::strcmp(temp.c_str(), dictionary[i].c_str()) == 0) {
+                            found = dictionary[i];
+                        }
+                    }
+
+                    //Replaced a letter
+                    if (j < dictionary[i].size()) {
+                        temp = key_input;
+                        temp = temp.insert(j, dictionary[i], j, 1);
+                        temp = temp.erase(j + 1, 1);
+                        if (std::strcmp(temp.c_str(), dictionary[i].c_str()) == 0) {
+                            found = dictionary[i];
+                        }
+                    }
+
+                    //added a letter 
+                    if (difference <= 0) {
+                        temp = key_input;
+                        temp = temp.erase(j, 1);
+                        if (std::strcmp(temp.c_str(), dictionary[i].c_str()) == 0) {
+                            found = dictionary[i];
+                        }
+                    }
+                    //swapped two letter
+                    if (j < dictionary[i].size() - 1) {
+                        temp = key_input;
+                        std::swap(temp[j], temp[j + 1]);
+                        if (std::strcmp(temp.c_str(), dictionary[i].c_str()) == 0) {
+                            found = dictionary[i];
+                        }
+                    }
+                }
+            }
+        }
+        if (found.empty()) {
+            suggestions_drawn.clear();
+            suggestions_drawn.push_back("no match");
+        } else {
+            suggestions_drawn.clear();
+            suggestions_drawn.push_back(found);
+        }
+        corrected = found;
+    }
+    return;
+}
+
+void command_parser() {
+
+    return;
+}
+
+/*************************************************************************************************************************************************************************/
+
+/*Added stuff for M3*/
+
+void path_finding(unsigned id1, unsigned id2) {
+    std::vector<unsigned> path = dijkstra(id1, id2, 15); 
+
+    if (external_click == true) {
+        std::string temp_msg = "Closest Intersection: " + intersections[id1].name;
+        message = temp_msg;
+    }
+    //    for (unsigned i = 0; i < currently_highlighted.size(); i++) {
+    //        intersections[currently_highlighted[i]].highlighted = false;
+    //    }
+    //    currently_highlighted.clear();
+    //    currently_highlighted.resize(path.size());
+    //
+    //    for (unsigned i = 0; i < path.size(); i++) {
+    //        currently_highlighted[i] = path[i];
+    //        intersections[currently_highlighted[i]].highlighted = true;
+    //
+    //    }
+
+    for (unsigned i = 0; i < getNumberOfStreetSegments(); i++) {
+        street_segments[i].highlight = false;
+    }
+    for (unsigned i = 0; i < path.size(); i++) {
+        street_segments[path[i]].highlight = true;
+    }
+}
+
+
+void path_finding_POI(unsigned id1, std::string name) {
+    std::vector<unsigned> path = find_path_to_point_of_interest(id1, name, 15); 
+
+    if (external_click == true) {
+        std::string temp_msg = "Closest Intersection: " + intersections[id1].name;
+        message = temp_msg;
+    }
+    //    for (unsigned i = 0; i < currently_highlighted.size(); i++) {
+    //        intersections[currently_highlighted[i]].highlighted = false;
+    //    }
+    //    currently_highlighted.clear();
+    //    currently_highlighted.resize(path.size());
+    //
+    //    for (unsigned i = 0; i < path.size(); i++) {
+    //        currently_highlighted[i] = path[i];
+    //        intersections[currently_highlighted[i]].highlighted = true;
+    //
+    //    }
+
+    for (unsigned i = 0; i < getNumberOfStreetSegments(); i++) {
+        street_segments[i].highlight = false;
+    }
+    for (unsigned i = 0; i < path.size(); i++) {
+        street_segments[path[i]].highlight = true;
+    }
+}
+
+
+/*M3 STUFF*/
+
+
+std::vector<street_segment_data> get_street_segments() {
+    return street_segments;
+}
+
+std::vector<t_point> get_intersections_cartesian(){
+    return intersections_cartesian;
+}
+
+double get_average_lat(){
+    return average_latitude;
+}
+
+
+
+

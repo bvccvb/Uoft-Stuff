@@ -1,0 +1,13 @@
+So essentially, for the basis of my implementation serial, I basically kept track of all the cells that are alive and dead as well as the neighbors of that cell.
+
+First i copy everything from the board to my own board in_ which is just a unsigned char array. I did this because i think it has better locality (board is 2*col*row and mines is only col*row) and usage of space. At this point i also keep track of the neighbors in this initialization. Incrementing the neighbor count of neighbors everytime a nre cell is alive.
+
+Also I am storing the neighbor and alive info like
+
+[ 3 bytes unused ][ 4 bytes neighbors][ 1 byte alive or dead]
+
+Now that in_ represents the inboard, I basically just iterate through each and make updates to a temp array which is just in_ copied. Basically we can skip all the ones that are dead and have no neighbors. When there is a dead cell that becomes alive, we need to increment its neighbors' neighbor count and similarly when a live cell dies, we need to decrement.
+
+This continues for all the generation and i copy the temp back into in_.
+
+I also parallelized the implementation. Inside the generation loop, I create the threads and split the work by rows and then rejoin them at the end. Because they're all just reading from in_ and incrementing. Need a lock at the edges.

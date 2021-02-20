@@ -1,0 +1,4 @@
+teamName: Team
+student1_fullName: Lam Fung Ng
+student1_studentNumber: 1003435525
+student1_email: lam.ng@mail.utoronto.ca

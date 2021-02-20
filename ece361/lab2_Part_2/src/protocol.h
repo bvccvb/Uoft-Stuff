@@ -1,0 +1,35 @@
+#define MAXDATASIZE 1024
+
+enum class PacketType : uint8_t
+{
+    LOGIN,
+    LOGIN_ACK,
+    LOGOUT,
+    LOGOUT_ACK,
+    LEAVE,
+    LEAVE_ACK,
+    LIST,
+    LIST_ACK,
+    CREATE,
+    CREATE_ACK,
+    JOIN,
+    JOIN_ACK,
+    KICK,
+    KICK_ACK,
+    BAN,
+    BAN_ACK,
+    UNBAN,
+    UNBAN_ACK,
+    DELETE,
+    DELETE_ACK,
+    RESIGN,
+    RESIGN_ACK,
+    MESSAGE,
+    MESSAGE_ACK,
+    REGISTER,
+    REGISTER_ACK,
+    SYNC,
+    SYNC_ACK,
+    PRIVATE,
+    PRIVATE_ACK
+};

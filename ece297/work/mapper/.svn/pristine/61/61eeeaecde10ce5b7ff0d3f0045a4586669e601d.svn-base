@@ -1,0 +1,234 @@
+/* 
+ * Copyright 2018 University of Toronto
+ *
+ * Permission is hereby granted, to use this software and associated 
+ * documentation files (the "Software") in course work at the University 
+ * of Toronto, or for personal use. Other uses are prohibited, in 
+ * particular the distribution of the Software either publicly or to third 
+ * parties.
+ *
+ * The above copyright notice and this permission notice shall be included in 
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR 
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, 
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE 
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER 
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+#include <iostream>
+#include <string>
+#include "m1.h"
+#include "m2.h"
+#include "global.h"
+#include "graphics.h"
+#include "map_data_structure.h"
+#include "OSMDatabaseAPI.h"
+#include "graphics.h"
+
+
+
+
+
+
+//Program exit codes
+constexpr int SUCCESS_EXIT_CODE = 0; //Everything went OK
+constexpr int ERROR_EXIT_CODE = 1; //An error occured
+constexpr int BAD_ARGUMENTS_EXIT_CODE = 2; //Invalid command-line usage
+
+//The default map to load if none is specified
+std::string default_map_path = "/cad2/ece297s/public/maps/toronto_canada.streets.bin";
+std::string map_name = "Toronto, Canada";
+
+int main(int argc, char** argv) {
+
+    std::string map_path;
+    std::string osm_path;
+    if (argc == 1) {
+        //Use a default map
+        map_path = default_map_path;
+    } else if (argc == 2) {
+        //Get the map from the command line
+        map_path = argv[1];
+    } else {
+        //Invalid arguments
+        std::cerr << "Usage: " << argv[0] << " [map_file_path]\n";
+        std::cerr << "  If no map_file_path is provided a default map is loaded.\n";
+        return BAD_ARGUMENTS_EXIT_CODE;
+    }
+    bool done = false;
+    bool help = true;
+    while (!done) {
+        //Get the map from the command line
+        int map = -1;
+        if (help) {
+            std::cout << "Chose one of the following maps to dispaly" << std::endl;
+            std::cout << "Type 0 to exit" << std::endl;
+            std::cout << "Type 1 for Beijing" << std::endl;
+            std::cout << "Type 2 for Cairo" << std::endl;
+            std::cout << "Type 3 for Cape-Town" << std::endl;
+            std::cout << "Type 4 for Golden-Horseshoe" << std::endl;
+            std::cout << "Type 5 for Hamilton " << std::endl;
+            std::cout << "Type 6 for Hong-Kong" << std::endl;
+            std::cout << "Type 7 for Iceland" << std::endl;
+            std::cout << "Type 8 for Interlaken" << std::endl;
+            std::cout << "Type 9 for London" << std::endl;
+            std::cout << "Type 10 for Moscow" << std::endl;
+            std::cout << "Type 11 for New-Delhi" << std::endl;
+            std::cout << "Type 12 for New-York" << std::endl;
+            std::cout << "Type 13 for Rio-De-Janeiro " << std::endl;
+            std::cout << "Type 14 for Saint-Helena" << std::endl;
+            std::cout << "Type 15 for Singapore" << std::endl;
+            std::cout << "Type 16 for Sydney" << std::endl;
+            std::cout << "Type 17 for Tehran" << std::endl;
+            std::cout << "Type 18 for Tokyo" << std::endl;
+            std::cout << "Type 19 for Toronto" << std::endl;
+            std::cout << "Type 20 to use custom map" << std::endl;
+            help = false;
+        }
+        std::cin >> map;
+        switch (map) {
+            case 0:
+                done = true;
+                break;
+            case 1:
+                map_path = "/cad2/ece297s/public/maps/beijing_china.streets.bin";
+                osm_path = "/cad2/ece297s/public/maps/beijing_china.osm.bin";
+                map_name = "Beijing, China";
+                break;
+            case 2:
+                map_path = "/cad2/ece297s/public/maps/cairo_egypt.streets.bin";
+                osm_path = "/cad2/ece297s/public/maps/cairo_egypt.osm.bin";
+                map_name = "Cairo, Egypt";
+                break;
+            case 3:
+                map_path = "/cad2/ece297s/public/maps/cape-town_south-africa.streets.bin";
+                osm_path = "/cad2/ece297s/public/maps/cape-town_south-africa.osm.bin";
+                map_name = "Cape-Town, South Africa";
+                break;
+            case 4:
+                map_path = "/cad2/ece297s/public/maps/golden-horseshoe_canada.streets.bin";
+                osm_path = "/cad2/ece297s/public/maps/golden-horseshoe_canada.osm.bin";
+                map_name = "Golden-Horseshoe, Canada";
+                break;
+            case 5:
+                map_path = "/cad2/ece297s/public/maps/hamilton_canada.streets.bin";
+                osm_path = "/cad2/ece297s/public/maps/hamilton_canada.osm.bin";
+                map_name = "Hamilton, Canada";
+                break;
+            case 6:
+                map_path = "/cad2/ece297s/public/maps/hong-kong_china.streets.bin";
+                osm_path = "/cad2/ece297s/public/maps/hong-kong_china.osm.bin";
+                map_name = "Hong-Kong, China";
+                break;
+            case 7:
+                map_path = "/cad2/ece297s/public/maps/iceland.streets.bin";
+                osm_path = "/cad2/ece297s/public/maps/iceland.osm.bin";
+                map_name = "Iceland";
+                break;
+            case 8:
+                map_path = "/cad2/ece297s/public/maps/interlaken_switzerland.streets.bin";
+                osm_path = "/cad2/ece297s/public/maps/interlaken_switzerland.osm.bin";
+                map_name = "Interlaken, Switzerland";
+                break;
+            case 9:
+                map_path = "/cad2/ece297s/public/maps/london_england.streets.bin";
+                osm_path = "/cad2/ece297s/public/maps/london_england.osm.bin";
+                map_name = "London, England";
+                break;
+            case 10:
+                map_path = "/cad2/ece297s/public/maps/moscow_russia.streets.bin";
+                osm_path = "/cad2/ece297s/public/maps/moscow_russia.osm.bin";
+                map_name = "Moscow, Russia";
+                break;
+            case 11:
+                map_path = "/cad2/ece297s/public/maps/new-delhi_india.streets.bin";
+                osm_path = "/cad2/ece297s/public/maps/new-delhi_india.osm.bin";
+                map_name = "New-Delhi, India";
+                break;
+            case 12:
+                map_path = "/cad2/ece297s/public/maps/new-york_usa.streets.bin";
+                osm_path = "/cad2/ece297s/public/maps/new-york_usa.osm.bin";
+                map_name = "New-York, USA";
+                break;
+            case 13:
+                map_path = "/cad2/ece297s/public/maps/rio-de-janeiro_brazil.streets.bin";
+                osm_path = "/cad2/ece297s/public/maps/rio-de-janeiro_brazil.osm.bin";
+                map_name = "Rio-De-Janeiro, Brazil";
+                break;
+            case 14:
+                map_path = "/cad2/ece297s/public/maps/saint-helena.streets.bin";
+                osm_path = "/cad2/ece297s/public/maps/saint-helena.osm.bin";
+                map_name = "Saint-Helena";
+                break;
+            case 15:
+                map_path = "/cad2/ece297s/public/maps/singapore.streets.bin";
+                osm_path = "/cad2/ece297s/public/maps/singapore.osm.bin";
+                map_name = "Singapore";
+                break;
+            case 16:
+                map_path = "/cad2/ece297s/public/maps/sydney_australia.streets.bin";
+                osm_path = "/cad2/ece297s/public/maps/sydney_australia.osm.bin";
+                map_name = "Sydney, Australia";
+                break;
+            case 17:
+                map_path = "/cad2/ece297s/public/maps/tehran_iran.streets.bin";
+                osm_path = "/cad2/ece297s/public/maps/tehran_iran.osm.bin";
+                map_name = "Tehran, Iran";
+                break;
+            case 18:
+                map_path = "/cad2/ece297s/public/maps/tokyo_japan.streets.bin";
+                osm_path = "/cad2/ece297s/public/maps/tokyo_japan.osm.bin";
+                map_name = "Tokyo, Japan";
+                break;
+            case 19:
+                map_path = "/cad2/ece297s/public/maps/toronto_canada.streets.bin";
+                osm_path = "/cad2/ece297s/public/maps/toronto_canada.osm.bin";
+                map_name = "Toronto, Canada";
+                break;
+            case 20:
+                std::cout << "Please provide map path" << std::endl;
+                std::cout << "Map path: ";
+                std::cin >> map_path;
+                std::cout << "Please provide osm path" << std::endl;
+                std::cout << "Osm path: ";
+                std::cin >> osm_path;
+                break;
+            default:
+                help = true;
+        }
+        
+        std::cin.ignore(1);
+
+        //Load the map and related data structures
+        if (!help & !done) {
+            bool load_success = (load_OSM(osm_path)&&load_map(map_path) && load_OSM2(osm_path));
+            if (!load_success) {
+                std::cerr << "Failed to load map or osm'" << map_path << "'\n";
+                return ERROR_EXIT_CODE;
+            }
+
+            std::cout << "Successfully loaded map and osm" << map_path << "'\n";
+            set_name (map_name);
+
+            //You can now do something with the map data
+
+            draw_map();
+
+
+
+
+
+            //Clean-up the map data and related data structures
+            std::cout << "Closing map and osm\n";
+            close_map();
+            closeOSMDatabase();
+        } else if (help){
+            std::cout << "Invalid input" << std::endl;
+        }
+    }
+    std::cout << "pngs frm the iNTERnet" << std::endl; 
+    return SUCCESS_EXIT_CODE;
+}

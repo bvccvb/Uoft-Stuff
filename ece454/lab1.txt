@@ -1,0 +1,106 @@
+#############################################################################################
+utorid: nglam
+name: (First 2 part) Lam Fung (Last) Ng
+email: lam.ng@mail.utoronto.ca
+#############################################################################################
+Q1: List the function you think might be important to optimize to in lab2's soruce code?
+A1: void implementation_driver in implementation.c
+Multi-line answers are fine.
+Do not modify the "###" lines or the question line above your answer. 
+#############################################################################################
+Q2: Report the 6 measurements using the slowest method of compilation as a baseline, report the speedup for each of the five measurements. Eg., if gcov was the slowest, and -g was twice as fast as gcov, then the speedup for -g relative to gcov would be 2.0.
+A2: Slowest is O3 at 0.41 sec which will be used for speedup calculation
+Gprof  Avg 0.23   Speedup 1.78
+Gcov   Avg 0.24   Speedup 1.71
+-G     Avg 0.22   Speedup 1.86
+-O2    Avg 0.35   Speedup 1.17
+-O3    Avg 0.41   Speedup 1.00
+-Os    Avg 0.33   Speedup 1.24
+#############################################################################################
+Q3: Which is the slowest and why?
+A3: Slowest is O3, O3 turns on all the optimization flags of O2 and more. This also includes more expensive optimisation options.
+#############################################################################################
+Q4: Which is the fastest and why?
+A4: Fastest is -g since it is default and doesn’t do anything extra like the other options (instrumentation, optimisation etc).
+#############################################################################################
+Q5: Which of gprof and gcov is faster and why?
+A5: Gprof is faster than gcov. Gcov is adding in instrumentation for every line whereas gprof is more per function.
+#############################################################################################
+Q6: Report the six measurements using the smallest method of compilation as a baseline, report the relative size increase for each of the six measurements. Eg., if -g was the smallest, and gprof was twice the size of -g, then the relative size increase for gprof relative to -g would be 2.0
+A6:  Smallest is Os with 29016 bytes which will be used for comparison.
+Gprof  64232   Relative Size 2.21
+Gcov   100960  Relative Size 3.48
+-G     64032   Relative Size 2.21
+-O2    33080   Relative Size 1.14
+-O3    37144   Relative Size 1.28
+-Os    29016   Relative Size 1.00
+#############################################################################################
+Q7: Which is the smallest and why?
+A7: Smallest is Os which is optimisation O2 + size optimization flags.
+#############################################################################################
+Q8: Which is the largest and why?
+A8: Largest is Gcov because it doesn’t have any size optimizations and it has to add in code instrumentation for each line.
+#############################################################################################
+Q9: Which of gprof and gcov is smaller and why?
+A9: Gprof is smaller. Gprov keeps track of per function calls, while Gcov keeps track of every single line. 
+#############################################################################################
+Q10: Report the six measurements using the slowest measurement as a baseline, also report the speedup for each version.
+A10: Slowest was g at 80.42 sec which will be used for speedup.
+Gprof  Avg 78.22   Speedup 1.03
+Gcov   Avg 77.18   Speedup 1.04
+-G     Avg 80.42   Speedup 1.00
+-O2    Avg 24.32   Speedup 3.31
+-O3    Avg 22.53   Speedup 3.57
+-Os    Avg 27.56   Speedup 2.92
+#############################################################################################
+Q11: Which is the slowest and why?
+A11: Based on results G is the slowest. It has no optimisation like O2, O3, Os. But I think gprov should actually be the slowest since it does interrupts and samples. Which adds to runtime.
+#############################################################################################
+Q12: Which is the fastest and why?
+A12: Fastest is O3. it turns on even more optimisation flags than O2 (Os is slower than O2 because it trades off some speed for size optimization). The other 3 has no performance optimisations.
+#############################################################################################
+Q13: Which of grof and gcov is faster and why?
+A13: Gprof is slower, gprof samples and interrupts periodically increasing the time.
+#############################################################################################
+Q14: For each version, list the top 3 functions (give function name and percentage execution time)
+A14: 
+-g -pg
+% time   name
+50.23    processRotateCWReference
+42.23    copyFrame
+1.66     processMoveUpReference
+
+-O2 -pg
+% time   name
+61.30    processRotateCWReference
+32.45    copyFrame
+1.27     processMoveLeftReference
+
+-O3 -pg
+% time   name
+57.67    processRotateCCWReference
+32.14    copyFrame
+3.05     processRotateCWReference
+
+#############################################################################################
+Q15: For the "number-one" function for -O3 (the one with the greatest percentage execution time), how does its percentage execution time compare with the percentage execution time for the same function in the -g version? How is this possible? What transformation did the compiler do and to which functions?
+A15: processRotateCCWReference was the highest for -O3. The percentage execution time for the same function in -g is 0%, basically spends no time in the -g version. The number of calls is the same 144.  I think what happened was that CCW inlined the CW into itself, processRotateCWReference calls from 1376 to 88. So it reduced the number of  calls to processRotateCWReference. It probably also did some loop unrolling or others optimisation. But the main thing looks like inlining.
+#############################################################################################
+Q16: Count the instructions for the function "number-one" function identified in the previous question and report the counts, as well as the reduction (reported as a ratio) in number of instructions for the -O3 version (ie., if the -O3 version has half as many instructions as the -g version, the reduction is 2.0x).
+A16: 
+G has 40 lines    Reduction 1.00
+O3 has 152 lines  Reduction 0.26 or 3.8 times more lines
+
+#############################################################################################
+Q17: Based only on the gcov results (ie., don’t think too much about what the code says) list the functions in the order that you would focus on optimizing them for the provided lab1 inputs and why. Identify each location by its line numbers in the original source file.
+A17: 
+gcov -b  implementation_reference.c.o 
+1120:  280:            buffer_frame = processRotateCWReference(buffer_frame, width, height, 3);
+168:  275:            buffer_frame = processRotateCWReference(buffer_frame, width, height, 1);
+
+Most important is buffer_frame = processRotateCWReference(buffer_frame, width, height, 3);, then buffer_frame = processRotateCWReference(buffer_frame, width, height, 1);
+#############################################################################################
+Q18(Bonus): Name the shortest GCC compiler flag where the compiler optimization it enables requires memory alignment. How many bytes does the data needs to be aligned?
+A18: -falign-jumps 
+If n unspecified or 0, use the machine-dependent default. Max value is 65536 bytes.
+

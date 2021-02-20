@@ -1,0 +1,655 @@
+#include "m2.h"
+#include "m1.h"
+#include "m3.h"
+#include "global.h"
+#include "map_data_structure.h"
+#include "graphics.h"
+#include "StreetsDatabaseAPI.h"
+#include "OSMDatabaseAPI.h"
+#include "OSMID.h"
+#include "OSMEntity.h"
+#include "OSMNode.h"
+#include "OSMWay.h"
+#include "OSMRelation.h"
+#include <string>
+#include <utility>
+
+
+
+
+/*DATA_STRUCTURES*/
+
+std::vector<street_segment_data> street_segments2;
+std::vector<t_point> intersections_cartesian2;
+
+typedef struct Graph {
+    unsigned id;
+    bool visited;
+    double shortest_distance;
+    unsigned came_from;
+    bool in_queue;
+    unsigned extra_street;
+    std::vector<unsigned> adjacent;
+    std::vector<double> weightings;
+    std::vector<unsigned> street;
+    unsigned came_from_street;
+} graph;
+
+//Vector of intersection nodes, that holds a vector of a pair of the connecting intersections node and street seg id
+//std::vector<unsigned, std::vector<std::pair<unsigned, unsigned>>> connections;
+std::vector<std::vector<std::pair<unsigned, unsigned>>> connections;
+
+//This vector holds all the strings holding the directions. Will be required to be printed to information window on the screen
+std::vector<std::string> string_vec;
+
+t_color shortest_path_color(228, 155, 255, 255);
+
+
+
+
+//std::vector<graph> node_heads(getNumberOfIntersections());
+//std::vector<unsigned> shortest_path_street_ids;
+
+/*************************************************************************************************************************************************************************/
+
+/*FUNCTIONs*/
+
+std::vector<graph> node;
+std::vector<unsigned> queue;
+std::vector<unsigned> vertex;
+std::vector<unsigned> visited;
+std::vector<unsigned> shortest_path;
+std::vector<unsigned> shortest_path_street;
+
+std::vector<unsigned> came_from;
+std::vector<unsigned> came_from_street;
+//std::vector<double> weight;
+//std::vector<double> weight_astar;
+
+double top_speed;
+
+void load_graph() {
+    street_segments2 = get_street_segments();
+
+    if (!node.empty()) node.clear();
+    if (!queue.empty()) queue.clear();
+    if (!vertex.empty()) vertex.clear();
+    if (!visited.empty()) visited.clear();
+    if (!shortest_path.empty()) shortest_path.clear();
+    if (!came_from.empty()) came_from.clear();
+//    if (!weight.empty()) weight.clear();
+    top_speed = 0;
+    graph temp;
+    unsigned num_nodes = getNumberOfIntersections();
+    unsigned num_street_seg = getNumberOfStreetSegments();
+
+    came_from.resize(num_nodes, DBL_MAX);
+    came_from_street.resize(num_street_seg, DBL_MAX);
+//    weight.resize(num_street_seg, DBL_MAX);
+//    weight_astar.resize(num_nodes, DBL_MAX);
+    for (unsigned i = 0; i < num_nodes; i++) {
+  
+        temp.id = i;
+        temp.visited = false;
+        temp.shortest_distance = 100000;
+        temp.came_from = DBL_MAX;
+        temp.adjacent = find_adjacent_intersections(i);
+
+        temp.in_queue = false;
+
+        node.push_back(temp);
+    }
+    load_weightings();
+}
+
+//Loads the connections vector
+
+void load_connections() {
+    unsigned num_intersections = getNumberOfIntersections();
+    connections.resize(num_intersections);
+
+    //For each intersection
+    for (unsigned i = 0; i < num_intersections; i++) {
+        //        std::vector<unsigned> adjacent = find_adjacent_intersections(i);
+        //        unsigned num_adjacent = adjacent.size();
+
+        std::vector<unsigned> connected_segments = find_intersection_street_segments(i);
+        unsigned num_segs = connected_segments.size();
+
+        for (unsigned k = 0; k < num_segs; k++) {
+
+            if (street_segments2[connected_segments[k]].oneWay && street_segments2[connected_segments[k]].StreetSegmentInfo_.from != i) {
+                // Ignore one-ways which cannot be accessed from this
+                // intersection.
+                continue;
+            }
+            else if(!street_segments2[connected_segments[k]].oneWay && street_segments2[connected_segments[k]].StreetSegmentInfo_.from != i)
+                connections[i].push_back(std::make_pair(street_segments2[connected_segments[k]].StreetSegmentInfo_.from, connected_segments[k]));
+            else { //if(!street_segments[connected_segments[k]].oneWay && street_segments[connected_segments[k]].StreetSegmentInfo_.to != i){
+                connections[i].push_back(std::make_pair(street_segments2[connected_segments[k]].StreetSegmentInfo_.to, connected_segments[k]));
+            }
+        }
+
+    }
+}
+
+void load_weightings() {
+    unsigned num_nodes = getNumberOfIntersections();
+    for (unsigned i = 0; i < num_nodes; i++) {
+
+        node[i].weightings.resize(node[i].adjacent.size(), DBL_MAX);
+        node[i].street.resize(node[i].adjacent.size());
+
+        std::vector<unsigned> connected_segments = find_intersection_street_segments(i);
+
+        for (unsigned j = 0; j < node[i].adjacent.size(); j++) {
+
+            unsigned num_segs = connected_segments.size();
+
+            if (num_segs > num_nodes)
+                node[i].extra_street = num_segs - num_nodes;
+            else 
+                node[i].extra_street = 0;
+                
+            
+            for (unsigned k = 0; k < num_segs; k++) {
+
+                if (street_segments2[connected_segments[k]].oneWay &&
+                        street_segments2[connected_segments[k]].StreetSegmentInfo_.from != i) {
+                    // Ignore one-ways which cannot be accessed from this
+                    // intersection.
+                    continue;
+                }
+
+                /*
+                 * For every segment connected to intersection i, find the
+                 * travel time and update this intersection's weightings.
+                 */
+                double weighting = find_street_segment_travel_time(connected_segments[k]);
+                
+                if (weighting > top_speed)
+                    top_speed = weighting;
+//                if (weightin)
+                for (unsigned m = 0; m < node[i].adjacent.size(); m++) {
+                    if (street_segments2[connected_segments[k]].StreetSegmentInfo_.to == node[i].adjacent[m] || street_segments2[connected_segments[k]].StreetSegmentInfo_.from == node[i].adjacent[m]) {
+                        if (node[i].weightings[m] > weighting) {
+                            node[i].weightings[m] = weighting;
+                            node[i].street[m] = connected_segments[k];
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+typedef std::pair<IntersectionIndex, double /* distance */> queue_element;
+
+struct CompareIntersectionDistance {
+
+    bool operator()(const queue_element & a, const queue_element & b) {
+        return a.second > b.second;
+    }
+};
+
+
+/****    A*    ****/
+std::vector<unsigned> dijkstra(IntersectionIndex start, IntersectionIndex end, double turn_penalty) {
+    std::priority_queue<queue_element, std::vector<queue_element>,
+            CompareIntersectionDistance> p_queue;
+    
+
+    shortest_path.clear();
+    shortest_path_street.clear();
+    visited.clear();
+    std::vector<double> weight(getNumberOfIntersections(), DBL_MAX);
+    came_from[start] = DBL_MAX;
+    weight[start] = 0;
+
+    bool complete = false;
+    for (IntersectionIndex i = 0; i < node.size(); i++) {
+        node[i].visited = false;
+        node[i].shortest_distance = DBL_MAX;
+        p_queue.push(std::pair<IntersectionIndex, double> (i, DBL_MAX));
+    }
+    p_queue.push(std::pair<IntersectionIndex, double> (start, 0));
+    LatLon end_position = getIntersectionPosition(end);    
+    while (!p_queue.empty()) {
+        queue_element current_node = p_queue.top();
+        p_queue.pop();
+        unsigned current = current_node.first;
+            
+        if (current == end) {
+            complete = true;
+            break;
+        }
+        if (current_node.second >= DBL_MAX){
+            break;
+        }
+        if (!node[current].visited) {
+            if (node[current].extra_street != 0) {
+
+            } else {
+                for (unsigned i = 0; i < node[current].adjacent.size(); i++) {
+                    double temp_weight = weight[current] + node[current].weightings[i];
+                    if (current != start) {
+                        //There is something wrong.
+                        if (street_segments2[came_from_street[current]].StreetSegmentInfo_.streetID != street_segments2[node[current].street[i]].StreetSegmentInfo_.streetID) {
+                            temp_weight = temp_weight + turn_penalty;
+                        }
+                    }
+                    if (temp_weight < weight[node[current].adjacent[i]]) {
+                        weight[node[current].adjacent[i]] = temp_weight;
+                        double weight_astar = find_distance_between_two_points(getIntersectionPosition(node[current].adjacent[i]), end_position) / ((top_speed * 1000 / 3600) + 2);
+                        came_from[node[current].adjacent[i]] = current;
+                        came_from_street[node[current].adjacent[i]] = node[current].street[i];
+                        p_queue.push(std::pair<IntersectionIndex, double> (node[current].adjacent[i], (temp_weight + weight_astar)));
+                    }
+                }
+            }
+        }
+        node[current].visited = true;
+        visited.push_back(current);
+    }
+    if (complete) {
+        unsigned current_path = end;
+        while (current_path != start) {
+            shortest_path.push_back(current_path);
+            shortest_path_street.push_back(came_from_street[current_path]);
+            current_path = came_from[current_path];
+        }
+    } else {
+        shortest_path.clear();
+        shortest_path_street.clear();
+        return shortest_path;
+    }
+    std::reverse(shortest_path.begin(), shortest_path.end());
+    std::reverse(shortest_path_street.begin(), shortest_path_street.end());
+    for (unsigned i = 0; i < getNumberOfIntersections(); i++) {
+        weight[i] = DBL_MAX;
+        came_from[i] = DBL_MAX;
+        node[i].visited = false;
+        node[i].in_queue = false;
+    }
+    visited.clear();
+    //directions();
+    return shortest_path_street;
+}
+
+double compute_path_travel_time(const std::vector<unsigned>& path, const double turn_penalty) {
+    if (path.empty()) return 0;
+    double time = 0;
+    double turn_time = 0;
+    if (path.size() != 0){
+        for (unsigned i = 0; i < path.size() - 1; i++) {
+            time = time + find_street_segment_travel_time(path[i]);
+            if (street_segments2[path[i]].StreetSegmentInfo_.streetID != street_segments2[path[i + 1]].StreetSegmentInfo_.streetID) {
+                turn_time++;
+            }
+        }
+        time = time + find_street_segment_travel_time(path[path.size() - 1]) + (turn_penalty * turn_time);
+    }
+//    std::cout << std::setprecision(15) << time << std::endl;
+    return time;
+}
+
+std::vector<unsigned> find_path_between_intersections(const unsigned intersect_id_start, const unsigned intersect_id_end, const double turn_penalty) {
+    return dijkstra(intersect_id_start, intersect_id_end, turn_penalty);
+
+}
+std::vector<unsigned> closest_POI_intersections(std::vector<unsigned> Intersection_){
+   
+    
+}
+
+//std::vector<unsigned> find_path_to_point_of_interest(const unsigned intersect_id_start, const std::string point_of_interest_name, const double turn_penalty) {
+//    std::vector<unsigned> a = find_POI2(point_of_interest_name);
+//    std::vector<unsigned> intersections_to_search;
+//    std::vector<unsigned> shortest_path;
+//    double shortest_time = 1000000;
+//    double temp_time = 0;
+//    std::vector<unsigned> temp_path;
+//    
+//    //finds the positions of he intersections
+//    for (unsigned i=0; i< a.size(); i++){
+//    //gets the intersections to check
+//       intersections_to_search.push_back(find_closest_intersection(getPointOfInterestPosition(a[i])));
+////       std::cout << intersections_to_search[i] << ", ";
+//    }
+//    std::cout << std::endl;
+//    for (unsigned i=0; i< intersections_to_search.size(); i++){
+////         std::cout << intersections_to_search[i] << ", ";
+//        temp_path = find_path_between_intersections(intersect_id_start, intersections_to_search[i],  turn_penalty);
+//        temp_time = compute_path_travel_time(temp_path, turn_penalty);
+//        if(temp_time < shortest_time && temp_time != 0){
+//            shortest_time = temp_time;
+//            shortest_path.clear();
+//            shortest_path =  temp_path;
+//            std::cout << shortest_time << ", ";
+//        }
+//        
+//    }
+//    std::cout << shortest_time <<std::endl;
+//    return (shortest_path);
+//}
+
+bool compPairFirst(const std::pair<double,unsigned>& a, const std::pair<double,unsigned>& b){
+    return a.first < b.first;
+}
+std::vector<unsigned> find_path_to_point_of_interest(const unsigned intersect_id_start, const std::string point_of_interest_name, const double turn_penalty) {
+    std::vector<std::pair<double,unsigned>> distance_and_intersection;
+    std::vector<unsigned> a = find_POI2(point_of_interest_name);
+    unsigned temp;
+    std::vector<unsigned> intersections_to_search;
+    std::vector<unsigned> shortest_path;
+    double shortest_time = 1000000000;
+    double temp_time = 0;
+    std::vector<unsigned> temp_path;
+    //std::priority_queue<queue_element, std::vector<queue_element>, CompareIntersectionDistance> p_queue;
+    
+    for (unsigned i=0; i< a.size(); i++){
+        //gets the intersections to check
+        temp = find_closest_intersection(getPointOfInterestPosition(a[i]));
+        //p_queue.push(std::pair<IntersectionIndex, double> (temp, find_distance_between_two_points(getIntersectionPosition(intersect_id_start), getIntersectionPosition(temp))));
+        distance_and_intersection.push_back(std::make_pair (find_distance_between_two_points(getIntersectionPosition(intersect_id_start), getIntersectionPosition(temp)),temp));
+    }
+    
+    std::sort(distance_and_intersection.begin(), distance_and_intersection.end(), compPairFirst);
+
+
+     
+//    if(p_queue.size() > 14){
+     if(distance_and_intersection.size() > 10){
+        for (unsigned i=0; i< 10; i++){
+            //queue_element current = p_queue.top();
+            //p_queue.pop();
+            //gets the intersections to check
+            //intersections_to_search.push_back(current.first);
+            intersections_to_search.push_back(distance_and_intersection[i].second);
+        }
+    }else{
+        //for (unsigned i=0; i<  p_queue.size(); i++){
+        for (unsigned i=0; i<  distance_and_intersection.size(); i++){
+            //queue_element current = p_queue.top();
+            //p_queue.pop();           
+            //gets the intersections to check
+            //intersections_to_search.push_back(current.first);
+            intersections_to_search.push_back(distance_and_intersection[i].second);
+        }
+    }
+
+    for (unsigned  i=0; i<  intersections_to_search.size(); i++){
+//        std::cout << intersections_to_search[i] << ", ";
+        temp_path = find_path_between_intersections(intersect_id_start, intersections_to_search[i],  turn_penalty);
+        temp_time = compute_path_travel_time(temp_path, turn_penalty);
+//        std::cout << temp_time<< std::endl;
+        if(temp_time < shortest_time && temp_time != 0){
+            shortest_time = temp_time;
+            shortest_path.clear();
+            shortest_path =  temp_path;
+        }
+    }
+    //directions();
+    return (shortest_path);
+}
+
+void directions() {
+
+    std::string initial_direction; //North, South, East, or West
+    std::string direction; //right or left
+    std::string street_1_name, street_2_name;
+    std::string insert;
+    double angle_1, angle_2;
+    double angle_direction;
+
+    unsigned num_nodes = shortest_path.size();
+    unsigned current_street_seg_id;
+    unsigned next_street_seg_id;
+    t_point node_1_xy, node_2_xy, node_3_xy;
+    t_point vec_1, vec_2;
+    
+    intersections_cartesian2 = get_intersections_cartesian();
+    string_vec.clear();
+
+    //Go through all the nodes in the shortest path 
+    if(num_nodes > 1){
+        for (unsigned i = 0; i < num_nodes - 1; i++) {
+            //get the street segment and the next
+            unsigned node_1 = shortest_path[i];
+            unsigned node_2 = shortest_path[i + 1];
+            unsigned node_3;
+            if (num_nodes >= 3 && i != num_nodes - 2) {
+                node_3 = shortest_path[i + 2];
+                node_3_xy = intersections_cartesian2[node_3];
+            }
+
+            //If current_street_seg_id is the first one in the list, get the first one, otherwise it will already be assigned 
+            if (i == 0) {
+                for (int j = 0; j < connections[node_1].size(); j++) {
+                    //If the next node in the connections vector is the next node in the shortest_path, get the street segment
+                    if (connections[node_1][j].first == node_2){
+                        current_street_seg_id = connections[node_1][j].second;
+                    }
+
+                }
+            }
+
+            //Always get the next one, unless it's the second last node 
+            if (i != num_nodes - 2) {
+                for (int j = 0; j < connections[node_2].size(); j++) {
+                    //If the next node in the connections vector is the next node in the shortest_path, get the street segment
+                    if (connections[node_2][j].first == node_3){
+                        next_street_seg_id = connections[node_2][j].second;
+                        street_2_name = getStreetName(getStreetSegmentInfo(next_street_seg_id).streetID);
+                    }                      
+                }
+            }
+
+
+            //Get street names
+            street_1_name = getStreetName(getStreetSegmentInfo(current_street_seg_id).streetID);
+
+            //get cartesian of node_1 and node_2
+            node_1_xy = intersections_cartesian2[node_1];
+            node_2_xy = intersections_cartesian2[node_2];
+
+            //Get angles for both street segments
+            double delta_y = node_2_xy.y - node_1_xy.y;
+            double delta_x = node_2_xy.x - node_1_xy.x;
+
+            angle_1 = atan(delta_y / delta_x) * 180 / PI;
+            double angle = angle_1;
+            if (num_nodes >= 3 && i != num_nodes - 2){
+                angle_2 = atan((node_3_xy.y - node_2_xy.y) / (node_3_xy.x - node_2_xy.x)) * 180 / PI;
+                vec_2.x = node_3_xy.x - node_2_xy.x;
+                vec_2.y = node_3_xy.y - node_2_xy.y;                        
+            }
+
+            //"?"
+            vec_1.x = node_2_xy.x - node_1_xy.x;
+            vec_1.y = node_2_xy.y - node_1_xy.y;
+
+            double cross_product;
+            cross_product = (vec_1.x * vec_2.y) - (vec_2.x * vec_1.y);
+
+            //for the first street segment, check the direction in terms of NSEW
+            if (i == 0) {
+
+                if(angle > 0){
+                    //Angle is in quadrant 2
+                    if(delta_y > 0){
+                        //North-east 
+                        if (angle >= 0 && angle <= 23)
+                            initial_direction = "east";
+                        else if (angle > 23 && angle < 68)
+                            initial_direction = "north-east";
+                        else if (angle >= 68 && angle <= 90)
+                            initial_direction = "north";
+
+                    }
+                    else{
+                        //It's in the 3rd quadrant
+                        //South-west
+                        if (angle >= 0 && angle <= 23)
+                            initial_direction = "west";
+                        else if (angle > 23 && angle < 68)
+                            initial_direction = "south-west";
+                        else if (angle >= 68 && angle <= 90)
+                            initial_direction = "south";
+                    }
+                }
+                else if(angle < 0){
+                    angle = angle + 180;
+
+                    if(delta_y < 0){ //It's in the 1st quadrant
+                        //South-east
+                        if (angle >= 90 && angle <= 112)
+                            initial_direction = "south";
+                        else if (angle > 112 && angle < 157)
+                            initial_direction = "south-east";
+                        else if (angle >= 157 && angle <= 180)
+                            initial_direction = "east";                        
+                    }
+                    else{ // its in the 3rd quadrant
+                        //North-west
+                        if (angle >= 90 && angle <= 112)
+                            initial_direction = "north";
+                        else if (angle > 112 && angle < 157)
+                            initial_direction = "north-west";
+                        else if (angle >= 157 && angle <= 180)
+                            initial_direction = "west";                    
+                    }
+                }
+                else{
+                    //angle = 0
+                    //Therefore delta_y must be zero
+                    if(delta_x > 0)
+                        initial_direction = "east";
+                    else
+                        initial_direction = "west";
+                }
+
+                if (street_1_name != street_2_name){
+                    insert = "Head " +initial_direction +" on " +street_1_name +" toward " +street_2_name;
+                    string_vec.push_back(insert);
+                    //std::cout << "Head " << initial_direction << " on " << street_1_name << " toward " << street_2_name << std::endl;
+                }
+                else{
+                    insert = "Head " +initial_direction +" on " +street_1_name;
+                    string_vec.push_back(insert);
+                    //std::cout << "Head " << initial_direction << " on " << street_1_name << std::endl;
+                }
+            }
+
+
+            if (street_1_name == street_2_name) {
+                //print nothing, they're just heading down the same street
+            } else {
+                //Compare street angles to see which way they should turn
+                if(cross_product > 0)
+                    direction = "left";
+                else if(cross_product < 0)
+                    direction = "right";
+                else{
+                    //if cross_product == 0
+                    direction = "straight";
+                }
+
+                //Print statement
+                if(street_2_name == "<unknown>"){
+                    insert = "Turn " +direction;
+                    string_vec.push_back(insert);
+                }
+                else{
+                    if(direction == "straight"){
+                        insert = "Head " +direction +" on " +street_2_name;
+                        string_vec.push_back(insert);
+                    }
+                    else {   
+                        insert = "Turn " +direction +" on " +street_2_name;
+                        string_vec.push_back(insert);
+                        //std::cout << "Turn " << direction << " on " << street_2_name << std::endl;               
+                    }
+                }
+            }
+
+            //Update street_seg_id when done
+            current_street_seg_id = next_street_seg_id;
+
+        }
+    }
+    insert = "You have arrived at your destination";
+    string_vec.push_back(insert);
+    //std::cout << "You have arrived at your destination" << std::endl;
+    
+    //To print 
+    for(unsigned i = 0; i < string_vec.size(); i++){
+        std::cout << string_vec[i] << std::endl;
+    }
+}
+
+void draw_shortest_path() {
+
+    setcolor(RED);
+    setlinewidth(5);
+
+    double avg_lat = get_average_lat();
+    intersections_cartesian2 = get_intersections_cartesian();
+
+    for (unsigned i = 0; i < shortest_path_street.size(); i++) {
+
+
+        IntersectionIndex intersection_id_from = street_segments2[shortest_path_street[i]].StreetSegmentInfo_.from;
+        IntersectionIndex intersection_id_to = street_segments2[shortest_path_street[i]].StreetSegmentInfo_.to;
+
+        if (street_segments2[shortest_path_street[i]].StreetSegmentInfo_.curvePointCount == 0) {
+
+            double x_from = intersections_cartesian2[intersection_id_from].x;
+            double y_from = intersections_cartesian2[intersection_id_from].y;
+            double x_to = intersections_cartesian2[intersection_id_to].x;
+            double y_to = intersections_cartesian2[intersection_id_to].y;
+
+            drawline(x_from, y_from, x_to, y_to);
+
+        }//If the street is curved
+        else {
+            // Street "from" point
+
+            double startx1 = intersections_cartesian2[intersection_id_from].x;
+            double starty1 = intersections_cartesian2[intersection_id_from].y;
+
+            // First curve point
+            double startx2 = longitude_to_cartesian(getStreetSegmentCurvePoint(street_segments2[shortest_path_street[i]].id, 0).lon(), avg_lat);
+            double starty2 = latitude_to_cartesian(getStreetSegmentCurvePoint(street_segments2[shortest_path_street[i]].id, 0).lat());
+
+            drawline(startx1, starty1, startx2, starty2);
+
+            // First curve point is now the new starting points
+            startx1 = startx2;
+            starty1 = starty2;
+
+            for (unsigned k = 1; k < street_segments2[shortest_path_street[i]].StreetSegmentInfo_.curvePointCount; k++) {
+                startx2 = longitude_to_cartesian(getStreetSegmentCurvePoint(street_segments2[shortest_path_street[i]].id, k).lon(), avg_lat);
+                starty2 = latitude_to_cartesian(getStreetSegmentCurvePoint(street_segments2[shortest_path_street[i]].id, k).lat());
+                drawline(startx1, starty1, startx2, starty2);
+
+                startx1 = startx2;
+                starty1 = starty2;
+
+    }
+            //Draw from the last curve point to streetsegment.to
+            startx2 = intersections_cartesian2[intersection_id_to].x;
+            starty2 = intersections_cartesian2[intersection_id_to].y;
+
+            drawline(startx1, starty1, startx2, starty2);
+}
+    }
+}
+
+void clear_shortest_path_street(){
+    shortest_path_street.clear();
+}
+
+std::vector<std::string> get_string_vec(){
+    return string_vec;
+}

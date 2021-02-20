@@ -1,0 +1,201 @@
+/*
+ * To change this license header, choose License Headers in Project Properties.
+ * To change this template file, choose Tools | Templates
+ * and open the template in the editor.
+ */
+
+/* 
+ * File:   global.h
+ * Author: kostivna
+ *
+ * Created on February 21, 2018, 5:54 PM
+ */
+
+#ifndef GLOBAL_H
+#define GLOBAL_H
+
+#include "map_data_structure.h"
+#include "graphics.h"
+#include "StreetsDatabaseAPI.h"
+#include "OSMEntity.h"
+#include "OSMNode.h"
+#include "OSMWay.h"
+#include "OSMRelation.h"
+
+
+/*************************************************************************************************************************************************************************/
+
+enum FeatureTypeImportance {
+    LargeClosed,
+    SmallClosed,
+    LargeOpen,
+    SmallOpen
+};
+
+struct feature_data {
+    unsigned feature_id;
+    std::string feature_name;
+    FeatureType feature_type;
+    TypedOSMID feature_OSMID;
+    unsigned feature_pointCount;
+    std::vector<t_point> feature_featurePoint;
+    FeatureTypeImportance feature_type_importance;
+    double area;
+};
+
+//Major street >= 50 km per hour
+//Minor street <= 50 km per hour
+enum StreetSegmentType {
+    Highway,
+    Major,
+    Minor
+};
+
+struct street_segment_data {
+    unsigned id;
+    bool oneWay;
+    bool highlight = false;
+    StreetSegmentType street_segment_type;
+    StreetSegmentInfo StreetSegmentInfo_;
+};
+
+/*************************************************************************************************************************************************************************/
+/*GLOBAL VARIABLES*/
+
+// creates a pointer to the object of type map_data_structure
+extern map_data_structure* map_data;
+std::string get_map_name();
+
+//Intersection data struct
+struct intersection_data {
+    LatLon position;
+    std::string name;
+    bool highlighted = false;
+};
+
+
+/*************************************************************************************************************************************************************************/
+/*FUNCTION DECLARATIONS FOR M2*/
+
+void set_name(std::string map_name_);
+bool load_OSM (std::string osm_path);
+bool load_OSM2 (std::string osm_path);
+void close_OSM();
+void load_OSM_nodeID_to_node_index();
+
+//loading functions
+void load_intersection(double & maximum_latitude_, double & minimum_latitude_, double & maximum_longitude_, double & minimum_longitude_);
+void load_street_segment();
+void load_features();
+void load_street_name_positions_and_angles();
+void load_intersections_cartesian();
+void load_street_name_positions();
+void load_street_name_angles();
+void load_street_name();
+void load_POI_names();
+void load_POI_names_with_duplicates();
+void load_graph();
+void load_weightings();
+void load_connections();
+
+//drawing functions
+void draw_screen();
+void draw_highlighted();
+void draw_intersection();
+void draw_street_segment();
+void draw_street_segment_highways();
+void draw_street_segment_major();
+void draw_street_segment_minor();
+void draw_features_layer1();
+void draw_features_layer2();
+void write_street_names();
+void draw_points_of_interest();
+void draw_neighbourhoods();
+
+//functions called by buttons
+void show_help(void (*drawscreen)());
+void show_poi_buttons(void (*drawscreen)());
+void show_bank_pois(void (*drawscreen)());
+void show_church_pois(void (*drawscreen)());
+void show_cinema_pois(void (*drawscreen)());
+void show_fuel_pois(void (*drawscreen)());
+void show_health_pois(void (*drawscreen)());
+void show_more_pois(void (*drawscreen)());
+void show_tourism_pois(void (*drawscreen)());
+void show_transportation_pois(void (*drawscreen)());
+void show_emergency_pois(void (*drawscreen)());
+void show_school_pois(void (*drawscreen)());
+void show_food_pois(void (*drawscreen)());
+void clear_pois(void (*drawscreen)());
+void act_on_button_press (float x, float y, t_event_buttonPressed event);
+//void open_external (void (*drawscreen)());
+void find_intersection(std::string street1, std::string street2);
+void find_POI(void (*drawScreen)());
+std::vector<unsigned> find_POI2(std::string);
+void night_mode(void (*drawscreen)());
+
+//math functions
+std::vector<std::string> compare_street_names (std::string name);
+std::vector<std::string> compare_street_names2 (std::string name);
+bool compare_area(const feature_data& a, const feature_data& b);
+double longitude_to_cartesian(double longitude, double latavg);
+double latitude_to_cartesian(double longitude);
+double cartesian_to_longitude(double x, double latavg);
+double cartesian_to_latitude(double y);
+double polygon_area (std::vector<t_point> position, int iteration);
+double line_length(std::vector<t_point> position, int size);
+bool in_window(t_bound_box range, float _x, float _y);
+t_point POI_offset(t_point xy);
+
+std::vector<std::string> compare_string(std::string name);
+std::vector<std::string> compare_string2(std::string name);
+void autocorrect2 ();
+void autocomplete2 ();
+void draw_suggestions();
+void draw_directions();
+void autocorrect (std::string & input_);
+void autocomplete (std::string & input_);
+
+
+
+/*************************************************************************************************************************************************************************/
+/*FUNCTION DECLARATIONS FOR M3*/
+
+//double compute_path_travel_time(const std::vector<unsigned>& path, const double turn_penalty);
+void draw_search_bar();
+void key_press(char h, int keysym);
+std::vector<unsigned> load_shortest_path_segs();
+void search();
+void search_poi();
+void highlight_poi();
+void search_intersections();
+void draw_sidebar();
+void draw_shortest_path();
+void clear_shortest_path_street();
+
+/*************************************************************************************************************************************************************************/
+/*DATA STRUCTURES FOR M3*/
+
+//std::vector<unsigned> find_path_between_intersections(const unsigned intersect_id_start, const unsigned intersect_id_end, const double turn_penalty);
+//std::vector<unsigned> find_path_to_point_of_interest(const unsigned intersect_id_start, const std::string point_of_interest_name, const double turn_penalty);
+std::vector<unsigned> dijkstra(IntersectionIndex start, IntersectionIndex end, double turn_factor);
+std::vector<unsigned> closest_POI_intersections(std::vector<unsigned> Intersection_);
+
+std::vector<street_segment_data> get_street_segments();
+std::vector<t_point> get_intersections_cartesian();
+double get_average_lat();
+
+// temp
+void path_finding(unsigned id1, unsigned id2);
+void path_finding_POI(unsigned id1, std::string name);
+
+void directions();
+std::vector<std::string> get_string_vec();
+
+// USED ONLY FOR DEBUGGING
+
+#define DEBUG(x) std::cout << "DEBUG: " << #x << "=" << x << "\n"
+#define DEBUG2(x) std::cout << "DEBUG: " << x << "\n"
+
+#endif /* GLOBAL_H */
+

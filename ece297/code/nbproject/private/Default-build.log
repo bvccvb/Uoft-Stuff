@@ -1,0 +1,2 @@
+g++ -MMD -MP -Wall -Isrc -g --std=c++11 -c src/main.cpp -o build/src/main.o
+g++ -MMD -MP -Wall -Isrc -g --std=c++11 build/src/main.o  -o money

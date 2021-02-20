@@ -1,0 +1,56 @@
+import java.io.*;
+import java.net.*;
+import java.util.*; 
+import java.util.Vector;
+
+
+
+public class Sender {
+
+	static Vector<TimeBytes> time_bytes = null;
+	static InetAddress addr = null;
+	static DatagramSocket socket = null;
+
+
+  	public static void main(String[] args) throws IOException {
+
+    	ReadFile fin = new ReadFile("poisson3.txt");
+      time_bytes = fin.parse();
+    
+    	addr = InetAddress.getByName(args[0]);
+    	socket = new DatagramSocket();
+
+      Vector<DatagramPacket> packets = new Vector<DatagramPacket>();
+
+      for(int i = 0; i < time_bytes.size(); ++i)
+      {
+        byte[] buf = new byte[time_bytes.get(i).bytes];
+        packets.add(new DatagramPacket(buf, buf.length, addr, Integer.parseInt(args[1])));
+      }
+
+
+      Long delay;
+      Long send_time = System.nanoTime();
+      Long curr_time = System.nanoTime();
+
+  		for(int i = 0; i < time_bytes.size() - 1; ++i)
+  		{
+
+        socket.send(packets.get(i));
+
+    		delay = time_bytes.get(i + 1).time - time_bytes.get(i).time;
+    		send_time += delay * 1000;
+
+    		do 
+    		{
+    			curr_time = System.nanoTime();
+    		}while(curr_time < send_time);
+    		
+
+    	}
+
+    	socket.send(packets.get(time_bytes.size() - 1));
+
+
+  }
+}

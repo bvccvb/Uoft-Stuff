@@ -1,0 +1,182 @@
+The following 10 tester(s) will be run:
+	M1_Func_Intersection_Tests
+	M1_Func_Street_Tests
+	M1_Func_Distance-Time_Tests
+	M1_Func_Spatial_Tests
+	M1_Perf_Intersection_Tests
+	M1_Perf_Street_Tests
+	M1_Perf_Distance-Time_Tests
+	M1_Perf_Spatial_Tests
+	M1_Load_Maps
+	M1_Valgrind
+
+Running Tester: M1_Func_Intersection_Tests
+  Building   M1_Func_Intersection_Tests
+    OK
+  Running    M1_Func_Intersection_Tests
+    Streets database is already loaded
+    Streets database is already loaded
+    Streets database is already loaded
+    Success: 4 tests passed.
+    Test time: 0.19 seconds.
+  Analyzing  M1_Func_Intersection_Tests
+    Testing (including setup) took: 0.21 sec
+    Found 0 failed tests
+
+Running Tester: M1_Func_Street_Tests
+  Building   M1_Func_Street_Tests
+    OK
+  Running    M1_Func_Street_Tests
+    Streets database is already loaded
+    Streets database is already loaded
+    Success: 3 tests passed.
+    Test time: 0.88 seconds.
+  Analyzing  M1_Func_Street_Tests
+    Testing (including setup) took: 0.89 sec
+    Found 0 failed tests
+
+Running Tester: M1_Func_Distance-Time_Tests
+  Building   M1_Func_Distance-Time_Tests
+    OK
+  Running    M1_Func_Distance-Time_Tests
+    Streets database is already loaded
+    Streets database is already loaded
+    Streets database is already loaded
+    Success: 4 tests passed.
+    Test time: 0.22 seconds.
+  Analyzing  M1_Func_Distance-Time_Tests
+    Testing (including setup) took: 0.24 sec
+    Found 0 failed tests
+
+Running Tester: M1_Func_Spatial_Tests
+  Building   M1_Func_Spatial_Tests
+    OK
+  Running    M1_Func_Spatial_Tests
+    Streets database is already loaded
+    Success: 2 tests passed.
+    Test time: 0.27 seconds.
+  Analyzing  M1_Func_Spatial_Tests
+    Testing (including setup) took: 0.29 sec
+    Found 0 failed tests
+
+Running Tester: M1_Perf_Intersection_Tests
+  Building   M1_Perf_Intersection_Tests
+    OK
+  Running    M1_Perf_Intersection_Tests
+    /cad2/ece297s/public//m1/tests/m1_perf_intersection_toronto_canada_public.cpp:203: error: Failure in intersection_street_segments_perf: Time constraint failed. Expected to run test under 1550ms but took 6046ms.
+    Streets database is already loaded
+    Streets database is already loaded
+    /cad2/ece297s/public//m1/tests/m1_perf_intersection_toronto_canada_public.cpp:452: error: Failure in directly_connected_perf: Time constraint failed. Expected to run test under 1008ms but took 1139ms.
+    Streets database is already loaded
+    FAILURE: 2 out of 4 tests failed (2 failures).
+    Test time: 9.21 seconds.
+  Analyzing  M1_Perf_Intersection_Tests
+    Testing (including setup) took: 9.23 sec
+    Found 2 failed tests
+
+Running Tester: M1_Perf_Street_Tests
+  Building   M1_Perf_Street_Tests
+    OK
+  Running    M1_Perf_Street_Tests
+    Timeout Error on M1_Perf_Street_Tests:  Run-time exceeded overall command timeout of 300.0s
+
+Running Tester: M1_Perf_Distance-Time_Tests
+  Building   M1_Perf_Distance-Time_Tests
+    OK
+  Running    M1_Perf_Distance-Time_Tests
+    Streets database is already loaded
+    Streets database is already loaded
+    Streets database is already loaded
+    Streets database is already loaded
+    Timeout Error on M1_Perf_Distance-Time_Tests:  Run-time exceeded overall command timeout of 300.0s
+
+Running Tester: M1_Perf_Spatial_Tests
+  Building   M1_Perf_Spatial_Tests
+    OK
+  Running    M1_Perf_Spatial_Tests
+    /cad2/ece297s/public//m1/tests/m1_perf_spatial_toronto_canada_public.cpp:173: error: Failure in closest_poi_perf: Time constraint failed. Expected to run test under 970ms but took 2658ms.
+    Streets database is already loaded
+    /cad2/ece297s/public//m1/tests/m1_perf_spatial_toronto_canada_public.cpp:313: error: Failure in closest_intersection_perf: Time constraint failed. Expected to run test under 985ms but took 6284ms.
+    FAILURE: 2 out of 2 tests failed (2 failures).
+    Test time: 9.23 seconds.
+  Analyzing  M1_Perf_Spatial_Tests
+    Testing (including setup) took: 9.24 sec
+    Found 2 failed tests
+
+Running Tester: M1_Load_Maps
+  Building   M1_Load_Maps
+    OK
+  Running    M1_Load_Maps
+    Streets database is already loaded
+    Streets database is already loaded
+    Streets database is already loaded
+    Streets database is already loaded
+    Streets database is already loaded
+    Streets database is already loaded
+    /cad2/ece297s/public//m1/tests/m1_load_maps_public.cpp:58: error: Failure in load_invalid_map_path: !load_map("/this/path/does/not/exist")
+    FAILURE: 1 out of 7 tests failed (1 failures).
+    Test time: 0.00 seconds.
+  Analyzing  M1_Load_Maps
+    Testing (including setup) took: 0.01 sec
+    Found 1 failed tests
+
+Running Tester: M1_Valgrind
+  Building   M1_Valgrind
+    OK
+  Running    M1_Valgrind
+    ==8028== Memcheck, a memory error detector
+    ==8028== Copyright (C) 2002-2015, and GNU GPL'd, by Julian Seward et al.
+    ==8028== Using Valgrind-3.12.0.SVN and LibVEX; rerun with -h for copyright info
+    ==8028== Command: ./M1_Valgrind
+    ==8028== 
+    Streets database is already loaded
+    Streets database is already loaded
+    Streets database is already loaded
+    Streets database is already loaded
+    Streets database is already loaded
+    Streets database is already loaded
+    Streets database is already loaded
+    Streets database is already loaded
+    Streets database is already loaded
+    Streets database is already loaded
+    Streets database is already loaded
+    Streets database is already loaded
+    Success: 13 tests passed.
+    Test time: 0.44 seconds.
+    ==8028== 
+    ==8028== HEAP SUMMARY:
+    ==8028==     in use at exit: 243,439 bytes in 1,344 blocks
+    ==8028==   total heap usage: 2,399 allocs, 1,055 frees, 462,340 bytes allocated
+    ==8028== 
+    ==8028== LEAK SUMMARY:
+    ==8028==    definitely lost: 0 bytes in 0 blocks
+    ==8028==    indirectly lost: 0 bytes in 0 blocks
+    ==8028==      possibly lost: 0 bytes in 0 blocks
+    ==8028==    still reachable: 243,439 bytes in 1,344 blocks
+    ==8028==         suppressed: 0 bytes in 0 blocks
+    ==8028== Reachable blocks (those to which a pointer was found) are not shown.
+    ==8028== To see them, rerun with: --leak-check=full --show-leak-kinds=all
+    ==8028== 
+    ==8028== For counts of detected and suppressed errors, rerun with: -v
+    ==8028== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+  Analyzing  M1_Valgrind
+    Testing (including setup) took: 1.34 sec
+    Number of Invalid Reads                 :  0
+    Number of Invalid Writes                :  0
+    Number of Invalid free/delete/delete[]  :  0
+    Number of Memory Leaks (definitely lost):  0
+    Number of Memory Leaks (indirectly lost):  0
+    Number of Memory Leaks (possibly lost)  :  0
+
+
+Test Summary: FAIL ( 7 of 32 failed)
+  M1_Func_Intersection_Tests   PASS ( 0 of  4 failed)
+  M1_Func_Street_Tests         PASS ( 0 of  3 failed)
+  M1_Func_Distance-Time_Tests  PASS ( 0 of  4 failed)
+  M1_Func_Spatial_Tests        PASS ( 0 of  2 failed)
+  M1_Perf_Intersection_Tests   FAIL ( 2 of  4 failed)
+  M1_Perf_Street_Tests         FAIL (Timed Out)
+  M1_Perf_Distance-Time_Tests  FAIL (Timed Out)
+  M1_Perf_Spatial_Tests        FAIL ( 2 of  2 failed)
+  M1_Load_Maps                 FAIL ( 1 of  7 failed)
+  M1_Valgrind                  PASS ( 0 of  6 failed)

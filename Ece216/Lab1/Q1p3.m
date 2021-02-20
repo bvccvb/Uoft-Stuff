@@ -1,0 +1,15 @@
+T=1;
+fs = 48000;
+N = T*Fs;
+t = 0 : 1/Fs : T;
+Fn = 1000;
+y = sin(Fn*2*pi*t);
+bass = audioread('bass.wav');
+guitar = audioread('guitar.wav');
+drums = audioread('drums.wav');
+duration = 5;
+b = bass(1:fs*duration);
+g = guitar(1:fs*duration);
+d = drums(1:fs*duration);
+comp = b + g + d;
+sound(comp, fs);

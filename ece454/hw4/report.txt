@@ -1,0 +1,86 @@
+Q1. It is important to use ifdef so there isn’t any extra code size or extra code or memory used for running the elements of the different implementations. Basically ex, a lot of the time debug code is done with ifdefs.
+
+Q2. Around the same difficulty. Only need to put the function start where mutex lock is and closing bracket where mutex unlock is. 
+
+Q3. it is not possible if you don’t know how many hash indexes there are and their hash function is. But if you did know, it is possible to do it without modifying hash.h. You can make the array of mutexes in the cc file I think, and use the HASH index to figure out which mutex in the array needs to be locked. This is only if you know how many hash indexes though.
+
+Q4. No it would not be possible. Can't just put lock in lookup and unlock at end of insert because in the case where lookup suceeds, insert is not called thus the list is not unlocked.
+
+Q5. I think with 2 new functions we can do lookup2 and lookup. After lookup suceeds and insert is not run. We can run a dummy lookup2 to just free up the lock and use insert to free lock if lookup fails.
+
+Q6. Yes, for my implementation I added 2 new functions to the hash class, ListLock, and ListUnlock with an array of mutexes set up in the setup function. This was the most intuitive to me, thus this was what I implemented.
+
+Q7. A lot harder to use TM as my implementation had the ListLock and ListUnlock in 2 different functions, thus it would be really hard to actually wrap them unlike in Q2
+
+Q8. Requires a lot more memory for the extra hash tables. Also potentially overhead for these extra hash tables. However I think it is faster as there is not contention for locks for this implementation.
+
+Q9.
+
+Single threaded version elapsed runtime = 10.37
+
+Single thread Global = 10.59 Overhead = 1.02
+Single thread TM = 13.00  Overhead = 1.25
+Single thread List = 10.79 Overhead = 1.04
+Single thread Element = 10.87 Overhead = 1.05
+Single thread Reduction = 10.40 Overhead = 1.003
+
+Q10. 
+
+2 thread Global =  6.55 
+4 thread Global = 5.52
+
+2 thread TM = 10.25
+4 thread TM = 6.58
+
+2 thread List =  5.63
+4 thread List = 3.07
+
+2 thread Element =  5.63
+4 thread Element = 2.96
+
+2 thread Reduction = 5.29
+4 thread Reduction = 2.77
+
+It looks like pretty much all the implementations improved from having more threads,
+
+Q11. 
+
+original implementation 1 thread = 20.55
+
+1 thread Global = 20.76
+2 thread Global =  11.38 
+4 thread Global = 7.34
+
+1 thread TM = 23.22
+2 thread TM = 15.36
+4 thread TM = 9.33
+
+1 thread List =  20.95
+2 thread List =  10.69
+4 thread List = 5.74
+
+1 thread Element =  21.04
+2 thread Element =  10.69
+4 thread Element = 5.63
+
+1 thread Reduction = 20.57
+2 thread Reduction = 10.36
+4 thread Reduction = 5.45
+
+Increasing the numbers skipped increased the times of all runs, almost by double it seems.I believe the reason is that 
+// skip a number of samples 
+for (int k=0; k<samples_to_skip; k++){ 
+rnum = rand_r((unsigned int*)&rnum); 
+}
+We are calling rand_r twice as much. I don’t think it has to do with lock contention because even reduction with no lock takes twice as long.
+
+Q12. 
+
+I think OptsRus should ship a version with all the elements and wrap the different locks and implementations with ifdefs so the users can build to their own specification. 
+
+For single core machines, it might make more sense to use no parallelization or simpler locks which have less overhead. 
+
+But for multiple cores, list lock or element locks might make more sense since it is fast and more efficient with memory than like Reduction (Extra Hash Tables(. 
+
+
+
